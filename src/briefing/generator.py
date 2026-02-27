@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -155,12 +155,10 @@ class BriefingGenerator:
 
     def _write_file(self, text: str, today: str) -> None:
         """Write briefing to data/briefings/YYYY-MM-DD.md with YAML front-matter."""
-        from datetime import datetime
-
         self._config.briefing_dir.mkdir(parents=True, exist_ok=True)
         path = self._config.briefing_dir / f"{today}.md"
         header = (
-            f"---\ndate: {today}\ngenerated_at: {datetime.utcnow().isoformat()}Z\n---\n\n"
+            f"---\ndate: {today}\ngenerated_at: {datetime.now(timezone.utc).isoformat()}\n---\n\n"
         )
         path.write_text(header + text, encoding="utf-8")
         logger.info("Briefing written to %s", path)
