@@ -1,7 +1,7 @@
 """QueryEngine — coordinates EmailVectorStore and EmailDatabase for CLI queries."""
 
 from src.storage.db import EmailDatabase
-from src.storage.models import EmailRow
+from src.storage.models import DeadlineRecord, EmailRow, FollowUpRecord
 from src.storage.vector_store import EmailVectorStore, SearchResult
 
 
@@ -55,3 +55,17 @@ class QueryEngine:
         Used by ``email backfill`` to skip already-processed emails.
         """
         return self.db.get_stored_ids_since(days)
+
+    def get_urgent_emails(self, hours: int = 24) -> list[EmailRow]:
+        """Return CRITICAL/HIGH priority emails from the last N hours."""
+        return self.db.get_urgent_emails(hours)
+
+    def get_pending_follow_ups(self) -> list[tuple[FollowUpRecord, EmailRow | None]]:
+        """Return pending follow-ups, each enriched with its source EmailRow."""
+        follow_ups = self.db.get_follow_ups(status="pending")
+        return [(fu, self.db.get_email_by_id(fu.email_id)) for fu in follow_ups]
+
+    def get_open_deadlines(self) -> list[tuple[DeadlineRecord, EmailRow | None]]:
+        """Return open deadlines, each enriched with its source EmailRow."""
+        deadlines = self.db.get_open_deadlines()
+        return [(dl, self.db.get_email_by_id(dl.email_id)) for dl in deadlines]

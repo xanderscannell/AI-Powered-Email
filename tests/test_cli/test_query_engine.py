@@ -5,11 +5,24 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.cli.query import QueryEngine
-from src.storage.models import EmailRow
+from src.storage.models import DeadlineRecord, EmailRow, FollowUpRecord
 from src.storage.vector_store import SearchResult
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────────
+
+
+def _make_follow_up(email_id: str = "msg_1") -> FollowUpRecord:
+    return FollowUpRecord(
+        id=1, email_id=email_id, status="pending", notes=None, created_at="2026-02-26 08:00:00"
+    )
+
+
+def _make_deadline(email_id: str = "msg_1") -> DeadlineRecord:
+    return DeadlineRecord(
+        id=1, email_id=email_id, description="Submit report by Friday", status="open",
+        created_at="2026-02-26 08:00:00"
+    )
 
 
 def _make_result(email_id: str = "msg_1", distance: float = 0.1) -> SearchResult:
@@ -147,3 +160,87 @@ class TestClose:
         engine.close()
         mock_store.close.assert_called_once()
         mock_db.close.assert_called_once()
+
+
+# ── get_urgent_emails ────────────────────────────────────────────────────────────
+
+
+class TestGetUrgentEmails:
+    def test_delegates_to_db(
+        self, engine: QueryEngine, mock_db: MagicMock
+    ) -> None:
+        mock_db.get_urgent_emails.return_value = [_make_row()]
+        result = engine.get_urgent_emails(hours=12)
+        mock_db.get_urgent_emails.assert_called_once_with(12)
+        assert len(result) == 1
+
+    def test_default_hours_is_24(
+        self, engine: QueryEngine, mock_db: MagicMock
+    ) -> None:
+        mock_db.get_urgent_emails.return_value = []
+        engine.get_urgent_emails()
+        mock_db.get_urgent_emails.assert_called_once_with(24)
+
+
+# ── get_pending_follow_ups ───────────────────────────────────────────────────────
+
+
+class TestGetPendingFollowUps:
+    def test_enriches_follow_ups_with_email_rows(
+        self, engine: QueryEngine, mock_db: MagicMock
+    ) -> None:
+        follow_up = _make_follow_up("msg_1")
+        mock_db.get_follow_ups.return_value = [follow_up]
+        mock_db.get_email_by_id.return_value = _make_row("msg_1")
+        result = engine.get_pending_follow_ups()
+        assert len(result) == 1
+        assert result[0][0] is follow_up
+        assert result[0][1].id == "msg_1"
+
+    def test_email_row_can_be_none(
+        self, engine: QueryEngine, mock_db: MagicMock
+    ) -> None:
+        mock_db.get_follow_ups.return_value = [_make_follow_up("msg_missing")]
+        mock_db.get_email_by_id.return_value = None
+        result = engine.get_pending_follow_ups()
+        assert len(result) == 1
+        assert result[0][1] is None
+
+    def test_returns_empty_when_no_follow_ups(
+        self, engine: QueryEngine, mock_db: MagicMock
+    ) -> None:
+        mock_db.get_follow_ups.return_value = []
+        result = engine.get_pending_follow_ups()
+        assert result == []
+
+
+# ── get_open_deadlines ───────────────────────────────────────────────────────────
+
+
+class TestGetOpenDeadlines:
+    def test_enriches_deadlines_with_email_rows(
+        self, engine: QueryEngine, mock_db: MagicMock
+    ) -> None:
+        deadline = _make_deadline("msg_1")
+        mock_db.get_open_deadlines.return_value = [deadline]
+        mock_db.get_email_by_id.return_value = _make_row("msg_1")
+        result = engine.get_open_deadlines()
+        assert len(result) == 1
+        assert result[0][0] is deadline
+        assert result[0][1].id == "msg_1"
+
+    def test_email_row_can_be_none(
+        self, engine: QueryEngine, mock_db: MagicMock
+    ) -> None:
+        mock_db.get_open_deadlines.return_value = [_make_deadline("msg_missing")]
+        mock_db.get_email_by_id.return_value = None
+        result = engine.get_open_deadlines()
+        assert len(result) == 1
+        assert result[0][1] is None
+
+    def test_returns_empty_when_no_deadlines(
+        self, engine: QueryEngine, mock_db: MagicMock
+    ) -> None:
+        mock_db.get_open_deadlines.return_value = []
+        result = engine.get_open_deadlines()
+        assert result == []
