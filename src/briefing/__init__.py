@@ -1,1 +1,1 @@
-"""Briefing layer — scheduled daily digest generation."""
+"""Briefing generator — daily email digest via Sonnet."""
