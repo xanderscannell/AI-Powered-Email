@@ -200,6 +200,22 @@ class GmailClient:
             else:
                 logger.debug("Label already exists: %s", label_name)
 
+    async def send_email(self, to: str, subject: str, body: str) -> None:
+        """Send an email via Gmail MCP.
+
+        Used by BriefingGenerator to deliver the daily briefing to self.
+        """
+        await self._call(
+            "send_gmail_message",
+            {
+                "to": to,
+                "subject": subject,
+                "body": body,
+                "user_google_email": self._user_email,
+            },
+        )
+        logger.info("Sent email to %s: %r", to, subject)
+
     # ── Internal helpers ───────────────────────────────────────────────────────
 
     async def _refresh_label_cache(self) -> None:

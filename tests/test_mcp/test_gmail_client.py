@@ -395,3 +395,38 @@ class TestGetEmailsSince:
         call_args = session.call_tool.call_args_list[0]
         arguments = call_args.args[1]
         assert "after:" in arguments["query"]
+
+
+# ── send_email ──────────────────────────────────────────────────────────────────
+
+
+class TestSendEmail:
+    async def test_calls_send_gmail_message_tool(
+        self, client: GmailClient, session: MagicMock
+    ) -> None:
+        session.call_tool.return_value = _tool_result("Email sent!")
+        await client.send_email(
+            "me@example.com",
+            "Morning Briefing \u2014 2026-02-27",
+            "# Briefing\n\nNo urgent items.",
+        )
+        session.call_tool.assert_called_once_with(
+            "send_gmail_message",
+            {
+                "to": "me@example.com",
+                "subject": "Morning Briefing \u2014 2026-02-27",
+                "body": "# Briefing\n\nNo urgent items.",
+                "user_google_email": "test@example.com",
+            },
+        )
+
+    async def test_raises_mcp_error_on_failure(
+        self, client: GmailClient, session: MagicMock
+    ) -> None:
+        session.call_tool.return_value = _error_result("Failed to send email")
+        with pytest.raises(MCPError):
+            await client.send_email(
+                "me@example.com",
+                "Morning Briefing \u2014 2026-02-27",
+                "# Briefing\n\nNo urgent items.",
+            )
