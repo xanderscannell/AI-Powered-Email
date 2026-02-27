@@ -53,9 +53,9 @@ Before the session ends:
 
 ## Current Focus
 
-**Phase**: Phase 1 — Foundation & Gmail MCP Integration
-**Working on**: Project scaffolding, Gmail MCP setup, and basic email fetching
-**Key constraint**: Everything runs locally — no cloud storage, no external servers beyond Gmail/GCal MCP and the Haiku API
+**Phase**: Phase 5 — Briefing Generator
+**Working on**: Not yet started — ready to begin after Phase 4 CLI completion
+**Key constraint**: Everything runs locally — no cloud storage, no external servers beyond Gmail/GCal MCP and the Haiku/Sonnet API
 
 ## Commit Style
 

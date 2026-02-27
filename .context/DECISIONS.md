@@ -163,3 +163,31 @@ Use APScheduler 3.x with a cron-style trigger embedded in the Python process.
 **Alternatives considered**:
 - System cron: Works, but requires user to configure OS-level jobs; less portable
 - Celery + Redis: Overkill for a single-machine personal tool
+
+---
+
+## ADR-007: QueryEngine for Cross-Store Coordination in the CLI
+
+**Date**: 2026-02-27
+**Status**: Accepted
+
+**Context**:
+Phase 4 introduces a CLI with three commands. Two of them (`status`, and eventually `briefing`) need to coordinate both `EmailVectorStore` and `EmailDatabase`. The question was whether to call the stores directly from command handlers or introduce a coordination layer.
+
+**Decision**:
+Introduce a `QueryEngine` class (`src/cli/query.py`) that wraps both stores and exposes higher-level query methods. CLI command handlers stay thin — they parse args, call `QueryEngine`, and format output.
+
+**Rationale**:
+- `status` joins vector search results with SQLite email bodies — that coordination logic belongs in one place, not scattered across command handlers
+- Phase 5's `BriefingGenerator` needs the same cross-store access patterns; `QueryEngine` gives it a clean foundation
+- Independently testable: mock both stores once in `QueryEngine` tests rather than in every command test
+
+**Consequences**:
+- (+) Thin command handlers — easy to read, easy to test
+- (+) Cross-store logic centralised and reusable across CLI + briefing layers
+- (+) Phase 5 can extend `QueryEngine` with `get_urgent_emails()`, `get_pending_follow_ups()`, etc.
+- (-) One extra file and class for Phase 4's 3 commands; justified by Phase 5 reuse
+
+**Alternatives considered**:
+- Direct store calls from command handlers: Simpler for Phase 4 alone, but duplicates coordination logic across commands and makes Phase 5 harder
+- Separate `BriefingQueryEngine` in Phase 5: Would duplicate `QueryEngine` logic; better to extend one class

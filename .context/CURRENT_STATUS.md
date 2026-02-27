@@ -4,9 +4,9 @@
 
 ## Current Position
 
-**Phase**: Phase 3 — Storage Layer
-**Subphase**: Complete — ready for Phase 4
-**Progress**: 65% complete
+**Phase**: Phase 4 — Search CLI
+**Subphase**: Complete — ready for Phase 5
+**Progress**: 80% complete
 
 ## Recently Completed
 
@@ -18,18 +18,24 @@
 - **Startup seed**: `get_unread_email_ids()` + `_seed_processed_ids()` — prevents processing historical emails on first run
 - **Phase 2 complete**: `src/processing/types.py` (Priority, Intent, EmailAnalysis), `src/processing/prompts.py` (ANALYSIS_TOOL schema, build_messages), `src/processing/analyzer.py` (EmailAnalyzer + AnalysisProcessor). Processor factory pattern wires gmail_client lifecycle.
 - **Phase 3 complete**: `src/storage/models.py` (DDL + result dataclasses), `src/storage/db.py` (EmailDatabase — emails/contacts/follow_ups/deadlines), `src/storage/vector_store.py` (EmailVectorStore — ChromaDB with metadata filtering). Fan-out writes in `AnalysisProcessor._write_storage()`. 126 tests total, all green.
+- **Phase 4 complete**: `src/cli/query.py` (QueryEngine), `src/cli/main.py` (click entry point), `src/cli/commands.py` (search/status/backfill). Also added `EmailRow` dataclass, `EmailDatabase.get_email_by_id()`, `EmailDatabase.get_stored_ids_since()`, `GmailClient.get_emails_since()`, `rich>=13.0.0` dep. 155 tests total, all green.
+  - Design doc: `docs/plans/2026-02-27-phase4-cli-design.md`
+  - Implementation plan: `docs/plans/2026-02-27-phase4-cli-plan.md`
+  - ADR-007: QueryEngine for cross-store CLI coordination
 
 ## In Progress
 
-None — Phase 3 complete.
+None — Phase 4 complete.
 
 ## Next Up
 
-1. Phase 4: Search CLI
-   - `src/cli/main.py` — click entry point
-   - `email search "<query>"` command — queries ChromaDB, formats results
-   - `email status "<topic>"` command — finds related thread, passes through Haiku for summary
-   - `email backfill --days N` command — rate-limited historical processing
+1. Phase 5: Briefing Generator
+   - `src/briefing/generator.py` — BriefingGenerator using Sonnet; consumes QueryEngine
+   - `src/briefing/scheduler.py` — APScheduler cron-based daily briefing runner
+   - `src/cli/commands.py` — add `email briefing` command (on-demand trigger)
+   - QueryEngine extensions: `get_urgent_emails()`, `get_pending_follow_ups()`, `get_open_deadlines()`
+   - Output: rich terminal panel (same style as `email status`)
+   - Schedule config: `BRIEFING_TIME` env var (e.g. `"08:00"`)
 
 ## Active Files and Modules
 
@@ -40,7 +46,7 @@ src/
 ├── processing/     [status: done — types.py, prompts.py, analyzer.py]
 ├── storage/        [status: done — models.py, db.py, vector_store.py]
 ├── briefing/       [status: not started]
-└── cli/            [status: not started]
+└── cli/            [status: done — query.py, main.py, commands.py]
 ```
 
 ## Recent Decisions
@@ -49,19 +55,18 @@ src/
 - **2026-02-27**: Use ChromaDB for local vector storage (see DECISIONS.md #ADR-002)
 - **2026-02-27**: Use Claude Haiku for email intelligence (see DECISIONS.md #ADR-003)
 - **2026-02-27**: Use SQLite for structured tracking data (see DECISIONS.md #ADR-004)
+- **2026-02-27**: Use Gmail MCP for all Gmail I/O (see DECISIONS.md #ADR-005)
+- **2026-02-27**: Use APScheduler for briefing scheduling (see DECISIONS.md #ADR-006)
+- **2026-02-27**: Use QueryEngine for cross-store CLI coordination (see DECISIONS.md #ADR-007)
 
 ## Open Questions
-
-- **Q**: ChromaDB vs LanceDB — which vector store to use?
-  - Leaning toward: ChromaDB (better Python ergonomics, widely documented)
-  - Blocked by: Benchmarking not done yet; can decide before Phase 3
 
 - **Q**: CLI interface vs local web UI?
   - Leaning toward: CLI first, web UI as optional Phase 6 add-on
   - Blocked by: Nothing; can start CLI in Phase 5
 
 - **Q**: APScheduler vs cron for briefing scheduling?
-  - Leaning toward: APScheduler (Python-native, no system config required)
+  - Leaning toward: APScheduler (Python-native, no system config required) — ADR-006 accepted
   - Blocked by: Nothing
 
 ## Blockers
@@ -71,6 +76,8 @@ None currently.
 ## Notes for Claude
 
 - Everything must stay local — no external storage, no cloud DBs
-- Gmail MCP and Google Calendar MCP are the only external integrations besides the Haiku API
+- Gmail MCP and Google Calendar MCP are the only external integrations besides the Haiku/Sonnet API
 - The processing pipeline is write-to-three-places: Gmail labels, ChromaDB, SQLite
-- Start simple: get the MCP + Haiku labeling loop working before adding vector search or briefings
+- `QueryEngine` exposes public `vector_store` and `db` attributes — backfill passes these to `AnalysisProcessor` to avoid duplicate store instances
+- CLI entry point: `email-agent` (declared in pyproject.toml `[project.scripts]`)
+- Phase 5 should extend `QueryEngine` with `get_urgent_emails()`, `get_pending_follow_ups()`, `get_open_deadlines()`
