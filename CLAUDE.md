@@ -57,6 +57,10 @@ Before the session ends:
 **Working on**: Project scaffolding, Gmail MCP setup, and basic email fetching
 **Key constraint**: Everything runs locally — no cloud storage, no external servers beyond Gmail/GCal MCP and the Haiku API
 
+## Commit Style
+
+Never include `Co-Authored-By` trailers in commit messages.
+
 ## Reference
 
 | File | Purpose |

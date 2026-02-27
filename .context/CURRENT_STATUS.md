@@ -5,17 +5,18 @@
 ## Current Position
 
 **Phase**: Phase 1 — Foundation & Gmail MCP Integration
-**Subphase**: Pre-implementation (planning complete)
-**Progress**: 0% complete
+**Subphase**: 1.2 Gmail MCP Integration
+**Progress**: 15% complete
 
 ## Recently Completed
 
 - Defined project architecture and tech stack in plan.txt
 - Initialized CDS prevention framework
+- **Phase 1.1 complete**: pyproject.toml (uv, Python 3.13), full src/ directory structure, .env.example, .gitignore, Makefile, conftest.py, `uv sync` verified (100 packages installed)
 
 ## In Progress
 
-- [ ] Project scaffolding (directory structure, pyproject.toml, .env setup)
+- [ ] Phase 1.2: Gmail MCP client (`src/mcp/gmail_client.py`)
 
 ## Next Up
 
