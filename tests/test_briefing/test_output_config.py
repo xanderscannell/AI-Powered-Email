@@ -42,9 +42,15 @@ class TestOutputConfigFromEnv:
         assert OutputConfig.from_env().file is True
 
     def test_defaults_when_env_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        for key in ("BRIEFING_OUTPUT_TERMINAL", "BRIEFING_OUTPUT_FILE", "BRIEFING_OUTPUT_EMAIL"):
+        for key in (
+            "BRIEFING_OUTPUT_TERMINAL",
+            "BRIEFING_OUTPUT_FILE",
+            "BRIEFING_OUTPUT_EMAIL",
+            "BRIEFING_EMAIL_TO",
+        ):
             monkeypatch.delenv(key, raising=False)
         config = OutputConfig.from_env()
         assert config.terminal is True
         assert config.file is False
         assert config.email_self is False
+        assert config.email_recipient == ""
