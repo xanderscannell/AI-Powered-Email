@@ -97,6 +97,35 @@ class GmailClient:
             return []
         return [self._parse_email(m) for m in messages if isinstance(m, dict)]
 
+    async def get_emails_since(self, days: int, max_results: int = 500) -> list[RawEmail]:
+        """Return all emails (read and unread) received in the last N days.
+
+        Uses Gmail's ``after:YYYY/MM/DD`` search operator. The max_results cap
+        defaults to 500 — the same limit used for startup ID seeding.
+        """
+        from datetime import datetime, timedelta
+
+        since = (datetime.now() - timedelta(days=days)).strftime("%Y/%m/%d")
+        summaries = await self._call(
+            "search_gmail_messages",
+            {"query": f"after:{since}", "max_results": max_results},
+        )
+        if not isinstance(summaries, list) or not summaries:
+            return []
+
+        ids = [str(m.get("message_id", "")) for m in summaries if isinstance(m, dict)]
+        ids = [i for i in ids if i]
+        if not ids:
+            return []
+
+        messages = await self._call(
+            "get_gmail_messages_content_batch",
+            {"message_ids": ids, "user_google_email": self._user_email},
+        )
+        if not isinstance(messages, list):
+            return []
+        return [self._parse_email(m) for m in messages if isinstance(m, dict)]
+
     async def get_email(self, email_id: str) -> RawEmail:
         """Return a single email with full body."""
         data = await self._call(

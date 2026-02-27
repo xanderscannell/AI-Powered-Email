@@ -340,3 +340,58 @@ class TestEnsureAiLabels:
         assert len(manage_calls) == len(missing)
         created_names = {c.args[1]["label_name"] for c in manage_calls}
         assert created_names == set(missing)
+
+
+# ── get_emails_since ────────────────────────────────────────────────────────────
+
+
+class TestGetEmailsSince:
+    async def test_returns_emails_matching_date_query(
+        self, client: GmailClient, session: MagicMock
+    ) -> None:
+        summaries = [{"message_id": "msg_1"}, {"message_id": "msg_2"}]
+        full_messages = [
+            {
+                "message_id": "msg_1",
+                "thread_id": "t1",
+                "from": "alice@example.com",
+                "subject": "Hello",
+                "snippet": "Hi there",
+                "body": "Full body",
+                "date": "2026-02-20",
+                "to": "me@example.com",
+            },
+            {
+                "message_id": "msg_2",
+                "thread_id": "t2",
+                "from": "bob@example.com",
+                "subject": "Check in",
+                "snippet": "Just checking",
+                "body": "Hey",
+                "date": "2026-02-21",
+                "to": "me@example.com",
+            },
+        ]
+        session.call_tool = AsyncMock(
+            side_effect=[_tool_result(summaries), _tool_result(full_messages)]
+        )
+        emails = await client.get_emails_since(days=7)
+        assert len(emails) == 2
+        assert emails[0].id == "msg_1"
+        assert emails[1].id == "msg_2"
+
+    async def test_returns_empty_list_when_no_emails_found(
+        self, client: GmailClient, session: MagicMock
+    ) -> None:
+        session.call_tool = AsyncMock(return_value=_tool_result([]))
+        emails = await client.get_emails_since(days=7)
+        assert emails == []
+
+    async def test_search_query_includes_after_date(
+        self, client: GmailClient, session: MagicMock
+    ) -> None:
+        session.call_tool = AsyncMock(return_value=_tool_result([]))
+        await client.get_emails_since(days=30)
+        call_args = session.call_tool.call_args_list[0]
+        arguments = call_args[0][1]
+        assert "after:" in arguments["query"]
