@@ -222,6 +222,9 @@ async def _amain() -> None:
     """Async entry point: wire up signal handlers and run the watcher."""
     from pathlib import Path
 
+    from src.briefing.generator import OutputConfig
+    from src.briefing.scheduler import create_briefing_scheduler
+    from src.cli.query import QueryEngine
     from src.processing.analyzer import AnalysisProcessor, EmailAnalyzer
     from src.storage.db import EmailDatabase
     from src.storage.vector_store import EmailVectorStore
@@ -229,6 +232,12 @@ async def _amain() -> None:
     analyzer = EmailAnalyzer()
     vector_store = EmailVectorStore(persist_dir=Path("data/chroma"))
     db = EmailDatabase(db_path=Path("data/email_agent.db"))
+
+    engine = QueryEngine(vector_store, db)
+    output_config = OutputConfig.from_env()
+    scheduler = create_briefing_scheduler(engine, output_config)
+    scheduler.start()
+
     watcher = EmailWatcher(
         processor_factory=lambda gmail: AnalysisProcessor(
             analyzer, gmail, vector_store=vector_store, db=db
@@ -237,11 +246,12 @@ async def _amain() -> None:
 
     loop = asyncio.get_running_loop()
     try:
-        # Unix: clean async signal handling
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, watcher.stop)
     except (NotImplementedError, AttributeError):
-        # Windows: fall back to KeyboardInterrupt caught in main()
         pass
 
-    await watcher.run()
+    try:
+        await watcher.run()
+    finally:
+        scheduler.shutdown(wait=False)

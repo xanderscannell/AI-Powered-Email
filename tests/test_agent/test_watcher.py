@@ -247,3 +247,35 @@ class TestRun:
                 await asyncio.wait_for(watcher.run(), timeout=3.0)
 
         assert call_count == 2, "expected two connection attempts"
+
+
+# ── Scheduler wiring in _amain ─────────────────────────────────────────────────
+
+
+class TestSchedulerWiring:
+    async def test_scheduler_started_in_amain(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_amain() should start the APScheduler before running the watcher."""
+        import src.agent.watcher as watcher_mod
+
+        mock_scheduler = MagicMock()
+
+        # Patch the storage constructors to avoid file I/O
+        monkeypatch.setattr("src.storage.db.EmailDatabase", MagicMock())
+        monkeypatch.setattr("src.storage.vector_store.EmailVectorStore", MagicMock())
+        monkeypatch.setattr("src.processing.analyzer.EmailAnalyzer", MagicMock())
+
+        # Patch EmailWatcher to avoid actually connecting to Gmail
+        mock_watcher = MagicMock()
+        mock_watcher.run = AsyncMock()
+        mock_watcher.stop = MagicMock()
+
+        with patch(
+            "src.briefing.scheduler.create_briefing_scheduler",
+            return_value=mock_scheduler,
+        ), patch("src.agent.watcher.EmailWatcher", return_value=mock_watcher):
+            await watcher_mod._amain()
+
+        mock_scheduler.start.assert_called_once()
+        mock_scheduler.shutdown.assert_called_once_with(wait=False)
