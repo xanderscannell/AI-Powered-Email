@@ -1,7 +1,10 @@
 """Email analysis pipeline — Haiku-powered structured extraction."""
 
+from __future__ import annotations
+
 import logging
 import os
+from typing import TYPE_CHECKING
 
 from anthropic import AsyncAnthropic
 from anthropic.types import ToolUseBlock
@@ -16,6 +19,10 @@ from src.processing.types import (
     Priority,
     PRIORITY_LABEL,
 )
+
+if TYPE_CHECKING:
+    from src.storage.db import EmailDatabase
+    from src.storage.vector_store import EmailVectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -92,26 +99,31 @@ def _parse_analysis(email_id: str, data: dict[str, object]) -> EmailAnalysis:
 
 
 class AnalysisProcessor:
-    """EmailProcessor that analyses each email and writes results back to Gmail.
+    """EmailProcessor that analyses each email and fans out results.
 
     Implements the EmailProcessor protocol from src.agent.watcher.
 
     On each email it:
       1. Calls Haiku via EmailAnalyzer → EmailAnalysis
-      2. Applies the priority label  (AI/Priority/*)
-      3. Applies the intent label    (AI/Intent/*)
-      4. Stars the email             (priority CRITICAL or HIGH)
-      5. Applies AI/FollowUp label   (if requires_reply)
-
-    Phase 3 will extend this to also write to ChromaDB and SQLite.
+      2. Applies Gmail labels (priority, intent, star, follow-up)
+      3. Writes to ChromaDB vector store  (if vector_store provided)
+      4. Writes to SQLite database        (if db provided)
     """
 
-    def __init__(self, analyzer: EmailAnalyzer, gmail: GmailClient) -> None:
+    def __init__(
+        self,
+        analyzer: EmailAnalyzer,
+        gmail: GmailClient,
+        vector_store: EmailVectorStore | None = None,
+        db: EmailDatabase | None = None,
+    ) -> None:
         self._analyzer = analyzer
         self._gmail = gmail
+        self._vector_store = vector_store
+        self._db = db
 
     async def process(self, email: RawEmail) -> None:
-        """Analyse email and apply Gmail labels. Never raises — logs on failure."""
+        """Analyse email and fan out to all storage targets. Never raises."""
         try:
             analysis = await self._analyzer.analyze(email)
         except AnalysisError as exc:
@@ -119,6 +131,7 @@ class AnalysisProcessor:
             return
 
         await self._apply_labels(email.id, analysis)
+        await self._write_storage(email, analysis)
 
         logger.info(
             "email=%s priority=%s intent=%s sentiment=%+.2f reply=%s deadline=%r",
@@ -146,3 +159,26 @@ class AnalysisProcessor:
                 await coro  # type: ignore[misc]
             except Exception as exc:  # noqa: BLE001
                 logger.error("Failed to apply %s to email %s: %s", name, email_id, exc)
+
+    async def _write_storage(self, email: RawEmail, analysis: EmailAnalysis) -> None:
+        """Write to ChromaDB and SQLite; log individual failures, never raise."""
+        if self._vector_store is not None:
+            try:
+                self._vector_store.upsert(email, analysis)
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "Failed to write to vector store for email %s: %s",
+                    email.id,
+                    exc,
+                    exc_info=True,
+                )
+        if self._db is not None:
+            try:
+                self._db.save(email, analysis)
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "Failed to write to database for email %s: %s",
+                    email.id,
+                    exc,
+                    exc_info=True,
+                )

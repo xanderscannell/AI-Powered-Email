@@ -325,3 +325,83 @@ class TestAnalysisProcessorProcess:
         gmail.apply_label = AsyncMock(side_effect=Exception("network error"))
 
         await proc.process(make_email())  # must not raise
+
+
+# ── AnalysisProcessor._write_storage ───────────────────────────────────────────
+
+
+class TestWriteStorage:
+    def _make_processor_with_storage(
+        self,
+    ) -> tuple[AnalysisProcessor, MagicMock, MagicMock, MagicMock]:
+        analyzer = MagicMock()
+        gmail = MagicMock()
+        gmail.apply_label = AsyncMock()
+        gmail.star_email = AsyncMock()
+        vector_store = MagicMock()
+        vector_store.upsert = MagicMock()
+        db = MagicMock()
+        db.save = MagicMock()
+        from src.processing.analyzer import AnalysisProcessor
+
+        proc = AnalysisProcessor(
+            analyzer=analyzer, gmail=gmail, vector_store=vector_store, db=db
+        )
+        return proc, analyzer, vector_store, db
+
+    def _analysis(self) -> EmailAnalysis:
+        return EmailAnalysis(
+            email_id="msg_1",
+            sentiment=0.0,
+            intent=Intent.FYI,
+            priority=Priority.MEDIUM,
+        )
+
+    async def test_upserts_to_vector_store(self) -> None:
+        proc, analyzer, vector_store, db = self._make_processor_with_storage()
+        analyzer.analyze = AsyncMock(return_value=self._analysis())
+
+        email = make_email()
+        await proc.process(email)
+
+        vector_store.upsert.assert_called_once()
+        call_email, call_analysis = vector_store.upsert.call_args.args
+        assert call_email.id == email.id
+
+    async def test_saves_to_database(self) -> None:
+        proc, analyzer, vector_store, db = self._make_processor_with_storage()
+        analyzer.analyze = AsyncMock(return_value=self._analysis())
+
+        await proc.process(make_email())
+
+        db.save.assert_called_once()
+
+    async def test_vector_store_failure_does_not_raise(self) -> None:
+        proc, analyzer, vector_store, db = self._make_processor_with_storage()
+        analyzer.analyze = AsyncMock(return_value=self._analysis())
+        vector_store.upsert = MagicMock(side_effect=Exception("chroma error"))
+
+        await proc.process(make_email())  # must not raise
+        db.save.assert_called_once()  # DB write still happens
+
+    async def test_db_failure_does_not_raise(self) -> None:
+        proc, analyzer, vector_store, db = self._make_processor_with_storage()
+        analyzer.analyze = AsyncMock(return_value=self._analysis())
+        db.save = MagicMock(side_effect=Exception("sqlite error"))
+
+        await proc.process(make_email())  # must not raise
+        vector_store.upsert.assert_called_once()  # vector store still runs
+
+    async def test_no_storage_calls_without_dependencies(self) -> None:
+        """AnalysisProcessor without storage kwargs must not crash."""
+        analyzer = MagicMock()
+        gmail = MagicMock()
+        gmail.apply_label = AsyncMock()
+        proc = AnalysisProcessor(analyzer=analyzer, gmail=gmail)
+        analyzer.analyze = AsyncMock(
+            return_value=EmailAnalysis(
+                email_id="x", sentiment=0.0,
+                intent=Intent.FYI, priority=Priority.MEDIUM,
+            )
+        )
+        await proc.process(make_email())  # must not raise

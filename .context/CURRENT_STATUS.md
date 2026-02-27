@@ -4,9 +4,9 @@
 
 ## Current Position
 
-**Phase**: Phase 2 — Processing Layer
-**Subphase**: Complete — ready for Phase 3
-**Progress**: 50% complete
+**Phase**: Phase 3 — Storage Layer
+**Subphase**: Complete — ready for Phase 4
+**Progress**: 65% complete
 
 ## Recently Completed
 
@@ -16,18 +16,20 @@
 - **Phase 1.2 complete**: `src/mcp/types.py` (RawEmail), `src/mcp/gmail_client.py` (GmailClient + gmail_client() context manager), 22 tests
 - **Phase 1.3 complete**: `src/agent/watcher.py` (EmailWatcher + EmailProcessor protocol + NoOpProcessor + main()), 17 tests
 - **Startup seed**: `get_unread_email_ids()` + `_seed_processed_ids()` — prevents processing historical emails on first run
-- **Phase 2 complete**: `src/processing/types.py` (Priority, Intent, EmailAnalysis), `src/processing/prompts.py` (ANALYSIS_TOOL schema, build_messages), `src/processing/analyzer.py` (EmailAnalyzer + AnalysisProcessor). Processor factory pattern wires gmail_client lifecycle. 83 tests total, all green.
+- **Phase 2 complete**: `src/processing/types.py` (Priority, Intent, EmailAnalysis), `src/processing/prompts.py` (ANALYSIS_TOOL schema, build_messages), `src/processing/analyzer.py` (EmailAnalyzer + AnalysisProcessor). Processor factory pattern wires gmail_client lifecycle.
+- **Phase 3 complete**: `src/storage/models.py` (DDL + result dataclasses), `src/storage/db.py` (EmailDatabase — emails/contacts/follow_ups/deadlines), `src/storage/vector_store.py` (EmailVectorStore — ChromaDB with metadata filtering). Fan-out writes in `AnalysisProcessor._write_storage()`. 126 tests total, all green.
 
 ## In Progress
 
-None — Phase 2 complete.
+None — Phase 3 complete.
 
 ## Next Up
 
-1. Phase 3: Storage Layer
-   - `src/storage/vector_store.py` — ChromaDB, embed email body+summary, store with email_id+metadata
-   - `src/storage/database.py` — SQLite, store EmailAnalysis rows (email_id, priority, intent, sentiment, requires_reply, deadline, entities, summary, timestamp)
-   - Fan-out writes in `AnalysisProcessor.process()`: Gmail labels + ChromaDB + SQLite simultaneously
+1. Phase 4: Search CLI
+   - `src/cli/main.py` — click entry point
+   - `email search "<query>"` command — queries ChromaDB, formats results
+   - `email status "<topic>"` command — finds related thread, passes through Haiku for summary
+   - `email backfill --days N` command — rate-limited historical processing
 
 ## Active Files and Modules
 
@@ -36,7 +38,7 @@ src/
 ├── agent/          [status: done — watcher.py]
 ├── mcp/            [status: done — types.py, gmail_client.py]
 ├── processing/     [status: done — types.py, prompts.py, analyzer.py]
-├── storage/        [status: not started]
+├── storage/        [status: done — models.py, db.py, vector_store.py]
 ├── briefing/       [status: not started]
 └── cli/            [status: not started]
 ```

@@ -220,11 +220,19 @@ def main() -> None:
 
 async def _amain() -> None:
     """Async entry point: wire up signal handlers and run the watcher."""
+    from pathlib import Path
+
     from src.processing.analyzer import AnalysisProcessor, EmailAnalyzer
+    from src.storage.db import EmailDatabase
+    from src.storage.vector_store import EmailVectorStore
 
     analyzer = EmailAnalyzer()
+    vector_store = EmailVectorStore(persist_dir=Path("data/chroma"))
+    db = EmailDatabase(db_path=Path("data/email_agent.db"))
     watcher = EmailWatcher(
-        processor_factory=lambda gmail: AnalysisProcessor(analyzer, gmail)
+        processor_factory=lambda gmail: AnalysisProcessor(
+            analyzer, gmail, vector_store=vector_store, db=db
+        )
     )
 
     loop = asyncio.get_running_loop()
