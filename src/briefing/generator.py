@@ -153,9 +153,17 @@ class BriefingGenerator:
             )
         )
 
-    def _write_file(self, text: str, today: str) -> None:  # pragma: no cover
-        """Write briefing to a markdown file. Implemented in Task 6."""
-        raise NotImplementedError
+    def _write_file(self, text: str, today: str) -> None:
+        """Write briefing to data/briefings/YYYY-MM-DD.md with YAML front-matter."""
+        from datetime import datetime
+
+        self._config.briefing_dir.mkdir(parents=True, exist_ok=True)
+        path = self._config.briefing_dir / f"{today}.md"
+        header = (
+            f"---\ndate: {today}\ngenerated_at: {datetime.utcnow().isoformat()}Z\n---\n\n"
+        )
+        path.write_text(header + text, encoding="utf-8")
+        logger.info("Briefing written to %s", path)
 
     async def _send_email(self, text: str, today: str) -> None:  # pragma: no cover
         """Send briefing via Gmail MCP. Implemented in Task 7."""

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -219,3 +220,74 @@ class TestTerminalOutput:
             mock_console_cls.return_value = mock_console
             await gen.generate()
         mock_console_cls.assert_not_called()
+
+
+# ── TestFileOutput ───────────────────────────────────────────────────────────
+
+
+class TestFileOutput:
+    @pytest.mark.asyncio
+    async def test_writes_markdown_file(self, tmp_path: Path) -> None:
+        config = OutputConfig(
+            terminal=False, file=True, email_self=False,
+            briefing_dir=tmp_path / "briefings",
+        )
+        engine = _make_engine()
+        gen = BriefingGenerator(engine, config)
+        with patch.object(gen._client.messages, "create", new=AsyncMock(
+            return_value=_make_sonnet_response("## Briefing\nContent here.")
+        )):
+            await gen.generate()
+
+        briefing_files = list((tmp_path / "briefings").glob("*.md"))
+        assert len(briefing_files) == 1
+        content = briefing_files[0].read_text()
+        assert "Content here." in content
+
+    @pytest.mark.asyncio
+    async def test_file_has_yaml_front_matter(self, tmp_path: Path) -> None:
+        config = OutputConfig(
+            terminal=False, file=True, email_self=False,
+            briefing_dir=tmp_path / "briefings",
+        )
+        engine = _make_engine()
+        gen = BriefingGenerator(engine, config)
+        with patch.object(gen._client.messages, "create", new=AsyncMock(
+            return_value=_make_sonnet_response("Text")
+        )):
+            await gen.generate()
+
+        content = next((tmp_path / "briefings").glob("*.md")).read_text()
+        assert content.startswith("---")
+        assert "date:" in content
+
+    @pytest.mark.asyncio
+    async def test_creates_briefing_dir_if_missing(self, tmp_path: Path) -> None:
+        briefing_dir = tmp_path / "new" / "nested" / "briefings"
+        config = OutputConfig(
+            terminal=False, file=True, email_self=False,
+            briefing_dir=briefing_dir,
+        )
+        engine = _make_engine()
+        gen = BriefingGenerator(engine, config)
+        with patch.object(gen._client.messages, "create", new=AsyncMock(
+            return_value=_make_sonnet_response("Text")
+        )):
+            await gen.generate()
+
+        assert briefing_dir.exists()
+
+    @pytest.mark.asyncio
+    async def test_no_file_written_when_disabled(self, tmp_path: Path) -> None:
+        config = OutputConfig(
+            terminal=False, file=False, email_self=False,
+            briefing_dir=tmp_path / "briefings",
+        )
+        engine = _make_engine()
+        gen = BriefingGenerator(engine, config)
+        with patch.object(gen._client.messages, "create", new=AsyncMock(
+            return_value=_make_sonnet_response("Text")
+        )):
+            await gen.generate()
+
+        assert not (tmp_path / "briefings").exists()
