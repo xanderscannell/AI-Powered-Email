@@ -7,7 +7,7 @@ import pytest
 from src.mcp.types import RawEmail
 from src.processing.types import EmailAnalysis, Intent, Priority
 from src.storage.db import EmailDatabase
-from src.storage.models import ContactRecord, DeadlineRecord, FollowUpRecord
+from src.storage.models import ContactRecord, DeadlineRecord, EmailRow, FollowUpRecord
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -226,3 +226,30 @@ class TestDeadlines:
         db._conn.commit()
 
         assert db.get_open_deadlines() == []
+
+
+# ── get_email_by_id ─────────────────────────────────────────────────────────────
+
+
+class TestGetEmailById:
+    def test_returns_row_for_known_id(self, db: EmailDatabase) -> None:
+        email = make_email()
+        db.save(email, make_analysis())
+        row = db.get_email_by_id(email.id)
+        assert row is not None
+        assert row.id == email.id
+        assert row.sender == email.sender
+        assert row.subject == email.subject
+        assert row.body == email.body
+        assert row.requires_reply is False
+
+    def test_returns_none_for_unknown_id(self, db: EmailDatabase) -> None:
+        assert db.get_email_by_id("nonexistent") is None
+
+    def test_requires_reply_is_bool(self, db: EmailDatabase) -> None:
+        email = make_email()
+        db.save(email, make_analysis(requires_reply=True))
+        row = db.get_email_by_id(email.id)
+        assert row is not None
+        assert row.requires_reply is True
+        assert isinstance(row.requires_reply, bool)

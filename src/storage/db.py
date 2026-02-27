@@ -11,6 +11,7 @@ from src.storage.models import (
     ALL_TABLES,
     ContactRecord,
     DeadlineRecord,
+    EmailRow,
     FollowUpRecord,
 )
 
@@ -96,6 +97,21 @@ class EmailDatabase:
             (email_address,),
         ).fetchone()
         return ContactRecord(**dict(row)) if row else None
+
+    def get_email_by_id(self, email_id: str) -> EmailRow | None:
+        """Return the stored email row for email_id, or None if not found."""
+        row = self._conn.execute(
+            """SELECT id, thread_id, sender, subject, snippet, body, date,
+                      sentiment, intent, priority, summary, requires_reply,
+                      deadline, entities, processed_at
+               FROM emails WHERE id = ?""",
+            (email_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        d = dict(row)
+        d["requires_reply"] = bool(d["requires_reply"])
+        return EmailRow(**d)
 
     # ── Private ─────────────────────────────────────────────────────────────────
 

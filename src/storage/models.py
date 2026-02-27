@@ -65,6 +65,27 @@ ALL_TABLES: list[str] = [
 ]
 
 
+@dataclass(frozen=True)
+class EmailRow:
+    """A full row from the emails table."""
+
+    id: str
+    thread_id: str
+    sender: str
+    subject: str
+    snippet: str
+    body: str | None
+    date: str | None
+    sentiment: float
+    intent: str
+    priority: int
+    summary: str
+    requires_reply: bool
+    deadline: str | None
+    entities: str  # JSON-encoded list[str]
+    processed_at: str
+
+
 # ── Query result types ──────────────────────────────────────────────────────────
 
 
