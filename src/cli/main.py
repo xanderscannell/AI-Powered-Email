@@ -6,6 +6,10 @@ from pathlib import Path
 import click
 from dotenv import load_dotenv
 
+from src.cli.query import QueryEngine
+from src.storage.db import EmailDatabase
+from src.storage.vector_store import EmailVectorStore
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,10 +22,6 @@ def cli(ctx: click.Context) -> None:
         level=logging.WARNING,  # keep CLI output clean; errors still surface
         format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
     )
-    from src.cli.query import QueryEngine
-    from src.storage.db import EmailDatabase
-    from src.storage.vector_store import EmailVectorStore
-
     ctx.ensure_object(dict)
     db = EmailDatabase(db_path=Path("data/email_agent.db"))
     vector_store = EmailVectorStore(persist_dir=Path("data/chroma"))
@@ -30,8 +30,6 @@ def cli(ctx: click.Context) -> None:
 
 
 # Import and register commands after cli is defined to avoid circular imports.
-# These modules will be created in Tasks 7–9.
-# from src.cli.commands import backfill, search, status  # noqa: E402
-# cli.add_command(search)
-# cli.add_command(status)
-# cli.add_command(backfill)
+from src.cli.commands import search  # noqa: E402
+
+cli.add_command(search)
