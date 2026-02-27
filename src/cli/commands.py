@@ -17,6 +17,7 @@ from rich.table import Table
 if TYPE_CHECKING:
     from src.cli.query import QueryEngine
 
+from src.briefing.generator import BriefingGenerator, OutputConfig
 from src.mcp.gmail_client import MCPError, gmail_client
 from src.processing.analyzer import AnalysisProcessor, EmailAnalyzer
 
@@ -214,3 +215,31 @@ async def _backfill_async(engine: QueryEngine, days: int, rate_limit: float) -> 
 
     except (MCPError, ValueError) as exc:
         console.print(f"[red]Gmail error: {exc}[/red]")
+
+
+@click.command()
+@click.option(
+    "--output",
+    default=None,
+    help="Comma-separated outputs to enable: terminal,file,email. Overrides env vars.",
+)
+@click.pass_obj
+def briefing(engine: QueryEngine, output: str | None) -> None:
+    """Generate an on-demand morning briefing with Claude Sonnet."""
+    asyncio.run(_briefing_async(engine, output))
+
+
+async def _briefing_async(engine: QueryEngine, output_override: str | None) -> None:
+    if output_override is not None:
+        flags = {s.strip() for s in output_override.split(",")}
+        config = OutputConfig(
+            terminal="terminal" in flags,
+            file="file" in flags,
+            email_self="email" in flags,
+            email_recipient=os.environ.get("BRIEFING_EMAIL_TO", ""),
+        )
+    else:
+        config = OutputConfig.from_env()
+
+    generator = BriefingGenerator(engine, config)
+    await generator.generate()

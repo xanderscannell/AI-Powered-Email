@@ -200,3 +200,46 @@ class TestBackfillCommand:
 
         assert result.exit_code == 0
         assert "Nothing to do" in result.output
+
+
+# ── email briefing ───────────────────────────────────────────────────────────────
+
+
+class TestBriefingCommand:
+    def test_briefing_registered_in_cli_group(self) -> None:
+        from src.cli.main import cli
+        assert "briefing" in cli.commands
+
+    def test_briefing_command_calls_generate(self) -> None:
+        from unittest.mock import AsyncMock
+
+        runner = CliRunner()
+        with patch("src.cli.commands.BriefingGenerator") as mock_gen_cls:
+            mock_gen = MagicMock()
+            mock_gen.generate = AsyncMock(return_value="## Briefing\nContent.")
+            mock_gen_cls.return_value = mock_gen
+            result = _invoke(MagicMock(), "briefing")
+
+        assert result.exit_code == 0, result.output
+        mock_gen.generate.assert_called_once()
+
+    def test_briefing_output_flag_overrides_env(self) -> None:
+        from unittest.mock import AsyncMock
+        from src.briefing.generator import OutputConfig
+
+        captured: list[OutputConfig] = []
+
+        def capture(engine: object, config: OutputConfig) -> MagicMock:
+            captured.append(config)
+            m = MagicMock()
+            m.generate = AsyncMock(return_value="text")
+            return m
+
+        with patch("src.cli.commands.BriefingGenerator", side_effect=capture):
+            result = _invoke(MagicMock(), "briefing", "--output", "file")
+
+        assert result.exit_code == 0, result.output
+        assert len(captured) == 1
+        assert captured[0].file is True
+        assert captured[0].terminal is False
+        assert captured[0].email_self is False
