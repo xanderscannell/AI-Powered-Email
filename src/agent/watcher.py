@@ -235,8 +235,6 @@ async def _amain() -> None:
 
     engine = QueryEngine(vector_store, db)
     output_config = OutputConfig.from_env()
-    scheduler = create_briefing_scheduler(engine, output_config)
-    scheduler.start()
 
     watcher = EmailWatcher(
         processor_factory=lambda gmail: AnalysisProcessor(
@@ -248,8 +246,11 @@ async def _amain() -> None:
     try:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, watcher.stop)
-    except (NotImplementedError, AttributeError):
+    except (NotImplementedError, AttributeError, ValueError):
         pass
+
+    scheduler = create_briefing_scheduler(engine, output_config)
+    scheduler.start()
 
     try:
         await watcher.run()
