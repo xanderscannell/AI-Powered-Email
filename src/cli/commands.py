@@ -17,6 +17,15 @@ from rich.table import Table
 if TYPE_CHECKING:
     from src.cli.query import QueryEngine
 
+try:
+    from src.mcp.gmail_client import MCPError, gmail_client
+    from src.processing.analyzer import AnalysisProcessor, EmailAnalyzer
+except ModuleNotFoundError:  # mcp package not installed in test environment
+    gmail_client = None  # type: ignore[assignment]
+    MCPError = Exception  # type: ignore[assignment,misc]
+    AnalysisProcessor = None  # type: ignore[assignment,misc]
+    EmailAnalyzer = None  # type: ignore[assignment,misc]
+
 logger = logging.getLogger(__name__)
 console = Console(width=200)
 
@@ -135,3 +144,80 @@ async def _status_async(engine: QueryEngine, topic: str, limit: int) -> None:
         return
 
     console.print(Panel(summary, title=f"[bold]{topic}[/bold]", border_style="blue"))
+
+
+@click.command()
+@click.option("--days", required=True, type=int, help="Days of history to process.")
+@click.option(
+    "--rate-limit",
+    default=1.0,
+    show_default=True,
+    help="Max Haiku API calls per second.",
+)
+@click.pass_obj
+def backfill(engine: QueryEngine, days: int, rate_limit: float) -> None:
+    """Process historical emails from the last N days."""
+    asyncio.run(_backfill_async(engine, days, rate_limit))
+
+
+async def _backfill_async(engine: QueryEngine, days: int, rate_limit: float) -> None:
+    import asyncio as _asyncio
+
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
+
+    stored_ids = engine.get_stored_ids_since(days)
+
+    try:
+        async with gmail_client() as gmail:
+            console.print(f"Fetching all emails from the last {days} day(s)...")
+            all_emails = await gmail.get_emails_since(days)
+
+            new_emails = [e for e in all_emails if e.id not in stored_ids]
+            console.print(
+                f"Found {len(all_emails)} email(s). "
+                f"[dim]{len(stored_ids)} already stored,[/dim] "
+                f"[bold]{len(new_emails)} new.[/bold]"
+            )
+
+            if not new_emails:
+                console.print("[green]Nothing to do.[/green]")
+                return
+
+            delay = 1.0 / rate_limit
+            processed = 0
+            failed = 0
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Processing...", total=len(new_emails))
+                analyzer = EmailAnalyzer()
+                processor = AnalysisProcessor(
+                    analyzer=analyzer,
+                    gmail=gmail,
+                    vector_store=engine.vector_store,
+                    db=engine.db,
+                )
+                for email in new_emails:
+                    try:
+                        await processor.process(email)
+                        processed += 1
+                    except Exception as exc:  # noqa: BLE001
+                        logger.error("Backfill: failed on email %s: %s", email.id, exc)
+                        failed += 1
+                    finally:
+                        progress.advance(task)
+                        await _asyncio.sleep(delay)
+
+            console.print(
+                f"[green]Done.[/green] {processed} processed"
+                + (f", [red]{failed} failed[/red]" if failed else "")
+                + "."
+            )
+
+    except MCPError as exc:
+        console.print(f"[red]Gmail MCP error: {exc}[/red]")

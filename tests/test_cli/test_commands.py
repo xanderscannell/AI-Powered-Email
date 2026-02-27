@@ -134,3 +134,69 @@ class TestStatusCommand:
 
         assert result.exit_code == 0
         assert "invoice dispute is unresolved" in result.output
+
+
+# ── email backfill ───────────────────────────────────────────────────────────────
+
+
+class TestBackfillCommand:
+    def test_skips_already_stored_emails(self) -> None:
+        engine = MagicMock()
+        engine.get_stored_ids_since.return_value = {"msg_1"}
+        engine.vector_store = MagicMock()
+        engine.db = MagicMock()
+
+        from src.mcp.types import RawEmail
+
+        all_emails = [
+            RawEmail(id="msg_1", thread_id="t1", sender="a@b.com", subject="Old", snippet="old"),
+            RawEmail(id="msg_3", thread_id="t3", sender="c@d.com", subject="New", snippet="new", body="New body."),
+        ]
+
+        mock_gmail = MagicMock()
+        mock_gmail.get_emails_since = MagicMock(return_value=_async_return(all_emails))
+        mock_gmail.__aenter__ = MagicMock(return_value=_async_return(mock_gmail))
+        mock_gmail.__aexit__ = MagicMock(return_value=_async_return(None))
+
+        mock_processor = MagicMock()
+        mock_processor.process = MagicMock(return_value=_async_return(None))
+
+        with patch("src.cli.commands.gmail_client", return_value=mock_gmail), patch(
+            "src.cli.commands.EmailAnalyzer"
+        ), patch("src.cli.commands.AnalysisProcessor", return_value=mock_processor):
+            result = _invoke(engine, "backfill", "--days", "30")
+
+        assert result.exit_code == 0
+        # processor.process should only be called once (for msg_3, not msg_1)
+        assert mock_processor.process.call_count == 1
+
+    def test_requires_days_option(self) -> None:
+        engine = MagicMock()
+        runner = CliRunner()
+        from src.cli.main import cli
+        with patch("src.cli.main.EmailDatabase"), patch(
+            "src.cli.main.EmailVectorStore"
+        ), patch("src.cli.main.QueryEngine", return_value=engine):
+            result = runner.invoke(cli, ["backfill"], catch_exceptions=False)
+        assert result.exit_code != 0
+
+    def test_nothing_to_do_when_all_stored(self) -> None:
+        engine = MagicMock()
+        engine.get_stored_ids_since.return_value = {"msg_1"}
+
+        from src.mcp.types import RawEmail
+
+        all_emails = [
+            RawEmail(id="msg_1", thread_id="t1", sender="a@b.com", subject="Old", snippet="old"),
+        ]
+
+        mock_gmail = MagicMock()
+        mock_gmail.get_emails_since = MagicMock(return_value=_async_return(all_emails))
+        mock_gmail.__aenter__ = MagicMock(return_value=_async_return(mock_gmail))
+        mock_gmail.__aexit__ = MagicMock(return_value=_async_return(None))
+
+        with patch("src.cli.commands.gmail_client", return_value=mock_gmail):
+            result = _invoke(engine, "backfill", "--days", "7")
+
+        assert result.exit_code == 0
+        assert "Nothing to do" in result.output

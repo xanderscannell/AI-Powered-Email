@@ -30,7 +30,8 @@ def cli(ctx: click.Context) -> None:
 
 
 # Import and register commands after cli is defined to avoid circular imports.
-from src.cli.commands import search, status  # noqa: E402
+from src.cli.commands import backfill, search, status  # noqa: E402
 
 cli.add_command(search)
 cli.add_command(status)
+cli.add_command(backfill)
