@@ -214,7 +214,7 @@ class TestBriefingCommand:
         from unittest.mock import AsyncMock
 
         runner = CliRunner()
-        with patch("src.cli.commands.BriefingGenerator") as mock_gen_cls:
+        with patch("src.briefing.generator.BriefingGenerator") as mock_gen_cls:
             mock_gen = MagicMock()
             mock_gen.generate = AsyncMock(return_value="## Briefing\nContent.")
             mock_gen_cls.return_value = mock_gen
@@ -235,7 +235,7 @@ class TestBriefingCommand:
             m.generate = AsyncMock(return_value="text")
             return m
 
-        with patch("src.cli.commands.BriefingGenerator", side_effect=capture):
+        with patch("src.briefing.generator.BriefingGenerator", side_effect=capture):
             result = _invoke(MagicMock(), "briefing", "--output", "file")
 
         assert result.exit_code == 0, result.output

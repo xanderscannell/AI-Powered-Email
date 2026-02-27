@@ -17,7 +17,6 @@ from rich.table import Table
 if TYPE_CHECKING:
     from src.cli.query import QueryEngine
 
-from src.briefing.generator import BriefingGenerator, OutputConfig
 from src.mcp.gmail_client import MCPError, gmail_client
 from src.processing.analyzer import AnalysisProcessor, EmailAnalyzer
 
@@ -230,6 +229,8 @@ def briefing(engine: QueryEngine, output: str | None) -> None:
 
 
 async def _briefing_async(engine: QueryEngine, output_override: str | None) -> None:
+    from src.briefing.generator import BriefingGenerator, OutputConfig
+
     if output_override is not None:
         flags = {s.strip() for s in output_override.split(",")}
         config = OutputConfig(
