@@ -17,14 +17,8 @@ from rich.table import Table
 if TYPE_CHECKING:
     from src.cli.query import QueryEngine
 
-try:
-    from src.mcp.gmail_client import MCPError, gmail_client
-    from src.processing.analyzer import AnalysisProcessor, EmailAnalyzer
-except ModuleNotFoundError:  # mcp package not installed in test environment
-    gmail_client = None  # type: ignore[assignment]
-    MCPError = Exception  # type: ignore[assignment,misc]
-    AnalysisProcessor = None  # type: ignore[assignment,misc]
-    EmailAnalyzer = None  # type: ignore[assignment,misc]
+from src.mcp.gmail_client import MCPError, gmail_client
+from src.processing.analyzer import AnalysisProcessor, EmailAnalyzer
 
 logger = logging.getLogger(__name__)
 console = Console(width=200)
@@ -161,8 +155,6 @@ def backfill(engine: QueryEngine, days: int, rate_limit: float) -> None:
 
 
 async def _backfill_async(engine: QueryEngine, days: int, rate_limit: float) -> None:
-    import asyncio as _asyncio
-
     from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
     stored_ids = engine.get_stored_ids_since(days)
@@ -211,7 +203,7 @@ async def _backfill_async(engine: QueryEngine, days: int, rate_limit: float) -> 
                         failed += 1
                     finally:
                         progress.advance(task)
-                        await _asyncio.sleep(delay)
+                        await asyncio.sleep(delay)
 
             console.print(
                 f"[green]Done.[/green] {processed} processed"
