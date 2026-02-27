@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 from typing import TYPE_CHECKING
 
 import click
+from anthropic import AsyncAnthropic
 from rich import box
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 if TYPE_CHECKING:
@@ -76,3 +80,58 @@ def search(engine: QueryEngine, query: str, limit: int) -> None:
     top = results[0].metadata
     if top.get("summary"):
         console.print(f"\n  [dim]Top result:[/dim] {top['summary']}")
+
+
+_STATUS_MODEL = "claude-sonnet-4-6"
+_STATUS_MAX_TOKENS = 1024
+
+
+@click.command()
+@click.argument("topic")
+@click.option("--limit", default=10, show_default=True, help="Emails to include.")
+@click.pass_obj
+def status(engine: QueryEngine, topic: str, limit: int) -> None:
+    """Synthesise a thread status for a topic using Claude Sonnet."""
+    asyncio.run(_status_async(engine, topic, limit))
+
+
+async def _status_async(engine: QueryEngine, topic: str, limit: int) -> None:
+    console.print(f"Fetching emails related to [bold]{topic!r}[/bold]...")
+    rows = engine.get_emails_for_topic(topic, n=limit)
+
+    if not rows:
+        console.print("[yellow]No emails found for that topic.[/yellow]")
+        return
+
+    console.print(f"Found {len(rows)} email(s). Generating summary with Sonnet...")
+
+    email_context = "\n\n---\n\n".join(
+        f"From: {r.sender}\nDate: {r.date or 'unknown'}\n"
+        f"Subject: {r.subject}\n\n{r.body or r.snippet}"
+        for r in rows
+    )
+    prompt = (
+        f"Here are {len(rows)} emails related to the topic '{topic}':\n\n"
+        f"{email_context}\n\n"
+        "Provide a concise status summary covering: current state, last action taken, "
+        "who needs to respond next (if anyone), and recommended next step. "
+        "Be specific — reference actual names, dates, and details from the emails."
+    )
+
+    client = AsyncAnthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+    try:
+        response = await client.messages.create(
+            model=_STATUS_MODEL,
+            max_tokens=_STATUS_MAX_TOKENS,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        summary = response.content[0].text if response.content else "(no response)"
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Sonnet synthesis failed: %s", exc)
+        console.print(f"[red]Synthesis failed: {exc}[/red]")
+        console.print("\n[dim]Raw emails found:[/dim]")
+        for row in rows:
+            console.print(f"  • {row.subject} — {row.sender} ({row.date})")
+        return
+
+    console.print(Panel(summary, title=f"[bold]{topic}[/bold]", border_style="blue"))

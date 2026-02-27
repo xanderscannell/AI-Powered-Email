@@ -1,5 +1,6 @@
 """Tests for CLI commands — QueryEngine is mocked, CliRunner used throughout."""
 
+import asyncio as _asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -60,6 +61,13 @@ def _invoke(engine: MagicMock, *args: str) -> Result:
         return runner.invoke(cli, list(args), catch_exceptions=False)
 
 
+def _async_return(value: object) -> object:
+    """Return an awaitable that resolves to value."""
+    async def _inner() -> object:
+        return value
+    return _inner()
+
+
 # ── email search ─────────────────────────────────────────────────────────────────
 
 
@@ -90,3 +98,39 @@ class TestSearchCommand:
         engine.search.return_value = []
         _invoke(engine, "search", "budget")
         engine.search.assert_called_once_with("budget", n=10)
+
+
+# ── email status ─────────────────────────────────────────────────────────────────
+
+
+class TestStatusCommand:
+    def test_no_emails_found_message(self) -> None:
+        engine = MagicMock()
+        engine.get_emails_for_topic.return_value = []
+        result = _invoke(engine, "status", "unknown topic")
+        assert result.exit_code == 0
+        assert "No emails found" in result.output
+
+    def test_calls_engine_with_topic_and_limit(self) -> None:
+        engine = MagicMock()
+        engine.get_emails_for_topic.return_value = []
+        _invoke(engine, "status", "Acme invoice", "--limit", "5")
+        engine.get_emails_for_topic.assert_called_once_with("Acme invoice", n=5)
+
+    def test_displays_sonnet_synthesis(self) -> None:
+        engine = MagicMock()
+        engine.get_emails_for_topic.return_value = [_make_row()]
+
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="The invoice dispute is unresolved.")]
+
+        mock_client = MagicMock()
+        mock_client.messages.create = MagicMock(
+            return_value=_async_return(mock_response)
+        )
+
+        with patch("src.cli.commands.AsyncAnthropic", return_value=mock_client):
+            result = _invoke(engine, "status", "invoice dispute")
+
+        assert result.exit_code == 0
+        assert "invoice dispute is unresolved" in result.output
