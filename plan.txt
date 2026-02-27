@@ -1,0 +1,24 @@
+Essentially a local agent that runs on your machine, uses MCP for Gmail/Calendar access, stores everything in a local vector DB for semantic search, and runs scheduled jobs for briefings and follow-up tracking. Here's how the pieces fit together:
+The Core Loop
+Your local agent (built with Claude Code or a Python script orchestrating Haiku via the API) acts as the brain. It connects to Gmail MCP to watch for new emails, processes each one through Haiku for sentiment, intent, priority, and entity extraction, then writes the results back as Gmail labels/stars and simultaneously embeds the email into a local vector store like ChromaDB or LanceDB. Everything lives on your machine.
+The Processing Layer
+When an email arrives, it flows through a lightweight pipeline:
+Email in → Haiku analyzes (sentiment, intent, priority, entities, summary) → results get written three places: back to Gmail as labels, into the vector DB with metadata, and into a simple local SQLite database for structured tracking (contact sentiment over time, pending follow-ups, deadlines).
+The Search Layer
+The vector store gives you natural language search across your entire email history. Instead of Gmail's keyword search, you ask "that thread about the budget dispute with the vendor in Q2" and it finds it semantically. ChromaDB runs entirely locally, zero external dependencies.
+The Briefing Layer
+A cron job (or just a scheduled Python task) runs each morning. It queries the SQLite DB and vector store, passes the results through Haiku, and generates your daily briefing — urgent items, overnight activity, follow-ups due, sentiment shifts. This could output as a markdown file, a Slack message to yourself, or even an email to your own inbox.
+The Interaction Layer
+When you want to engage on-demand, you talk to the agent directly — "summarize my unread," "draft a reply to Sarah's last email," "what's the status of the Acme project." It pulls context from the vector store and Gmail MCP, uses Haiku to generate responses, and can push drafts back into Gmail.
+Tech Stack Summary
+
+Orchestration: Python script or Claude Code agent
+Email access: Gmail MCP server
+Calendar access: Google Calendar MCP server
+Intelligence: Haiku API (cheap and fast enough to run on every email)
+Vector search: ChromaDB or LanceDB (local, no server needed)
+Structured data: SQLite (follow-ups, contact sentiment history, deadlines)
+Scheduling: cron or APScheduler for daily briefings
+Interface: CLI, or a simple local web UI if you want something visual
+
+The beauty of this setup is that it starts simple — you can get the basic MCP + Haiku labeling loop working in an afternoon — and every other piece (vector search, briefings, draft generation) layers on incrementally without rearchitecting anything.
