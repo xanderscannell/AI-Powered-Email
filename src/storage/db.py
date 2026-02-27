@@ -110,7 +110,7 @@ class EmailDatabase:
         if row is None:
             return None
         d = dict(row)
-        d["requires_reply"] = bool(d["requires_reply"])
+        d["requires_reply"] = bool(d["requires_reply"]) if d["requires_reply"] is not None else False
         return EmailRow(**d)
 
     # ── Private ─────────────────────────────────────────────────────────────────

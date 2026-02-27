@@ -242,6 +242,7 @@ class TestGetEmailById:
         assert row.subject == email.subject
         assert row.body == email.body
         assert row.requires_reply is False
+        assert row.entities == '["Alice"]'
 
     def test_returns_none_for_unknown_id(self, db: EmailDatabase) -> None:
         assert db.get_email_by_id("nonexistent") is None
@@ -253,3 +254,22 @@ class TestGetEmailById:
         assert row is not None
         assert row.requires_reply is True
         assert isinstance(row.requires_reply, bool)
+
+    def test_nullable_fields_returned_as_none(self, db: EmailDatabase) -> None:
+        from src.mcp.types import RawEmail
+
+        raw = RawEmail(
+            id="msg_null",
+            thread_id="thread_null",
+            sender="x@example.com",
+            subject="Nullable test",
+            snippet="snip",
+            body=None,
+            date=None,
+        )
+        db.save(raw, make_analysis("msg_null"))
+        row = db.get_email_by_id("msg_null")
+        assert row is not None
+        assert row.body is None
+        assert row.date is None
+        assert row.deadline is None
