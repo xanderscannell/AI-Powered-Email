@@ -194,7 +194,7 @@ async def _backfill_async(engine: QueryEngine, days: int, rate_limit: float) -> 
                     vector_store=engine.vector_store,
                     db=engine.db,
                 )
-                for email in new_emails:
+                for i, email in enumerate(new_emails):
                     try:
                         await processor.process(email)
                         processed += 1
@@ -203,7 +203,8 @@ async def _backfill_async(engine: QueryEngine, days: int, rate_limit: float) -> 
                         failed += 1
                     finally:
                         progress.advance(task)
-                        await asyncio.sleep(delay)
+                        if i < len(new_emails) - 1:
+                            await asyncio.sleep(delay)
 
             console.print(
                 f"[green]Done.[/green] {processed} processed"
@@ -211,5 +212,5 @@ async def _backfill_async(engine: QueryEngine, days: int, rate_limit: float) -> 
                 + "."
             )
 
-    except MCPError as exc:
-        console.print(f"[red]Gmail MCP error: {exc}[/red]")
+    except (MCPError, ValueError) as exc:
+        console.print(f"[red]Gmail error: {exc}[/red]")

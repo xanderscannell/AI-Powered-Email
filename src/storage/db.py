@@ -110,7 +110,7 @@ class EmailDatabase:
         if row is None:
             return None
         d = dict(row)
-        d["requires_reply"] = bool(d["requires_reply"]) if d["requires_reply"] is not None else False
+        d["requires_reply"] = bool(d["requires_reply"])
         return EmailRow(**d)
 
     def get_stored_ids_since(self, days: int) -> set[str]:
