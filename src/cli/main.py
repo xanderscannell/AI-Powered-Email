@@ -1,6 +1,7 @@
 """CLI entry point for the AI-powered email agent."""
 
 import logging
+from pathlib import Path
 
 import click
 from dotenv import load_dotenv
@@ -17,8 +18,6 @@ def cli(ctx: click.Context) -> None:
         level=logging.WARNING,  # keep CLI output clean; errors still surface
         format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
     )
-    from pathlib import Path
-
     from src.cli.query import QueryEngine
     from src.storage.db import EmailDatabase
     from src.storage.vector_store import EmailVectorStore
