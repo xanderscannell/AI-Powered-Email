@@ -24,7 +24,7 @@ _BRIEFING_MAX_TOKENS = 1500
 _PRIORITY_LABEL: dict[int, str] = {1: "CRITICAL", 2: "HIGH", 3: "MEDIUM", 4: "LOW", 5: "FYI"}
 
 
-@dataclass
+@dataclass(frozen=True)
 class OutputConfig:
     """Controls where the generated briefing is delivered."""
 

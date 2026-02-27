@@ -11,9 +11,6 @@ class QueryEngine:
     Both stores are exposed as public attributes so commands can pass them to
     AnalysisProcessor (e.g. during backfill) without creating duplicate instances.
 
-    Phase 5 note: add get_urgent_emails(), get_pending_follow_ups(), and
-    get_open_deadlines() here for the BriefingGenerator.
-
     Usage::
 
         engine = QueryEngine(vector_store, db)
