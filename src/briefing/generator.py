@@ -152,3 +152,11 @@ class BriefingGenerator:
                 border_style="green",
             )
         )
+
+    def _write_file(self, text: str, today: str) -> None:  # pragma: no cover
+        """Write briefing to a markdown file. Implemented in Task 6."""
+        raise NotImplementedError
+
+    async def _send_email(self, text: str, today: str) -> None:  # pragma: no cover
+        """Send briefing via Gmail MCP. Implemented in Task 7."""
+        raise NotImplementedError
