@@ -291,3 +291,76 @@ class TestFileOutput:
             await gen.generate()
 
         assert not (tmp_path / "briefings").exists()
+
+
+# ── TestEmailOutput ──────────────────────────────────────────────────────────
+
+
+class TestEmailOutput:
+    async def test_sends_email_when_enabled(self) -> None:
+        config = OutputConfig(
+            terminal=False, file=False, email_self=True,
+            email_recipient="me@example.com",
+        )
+        engine = _make_engine()
+        gen = BriefingGenerator(engine, config)
+
+        with patch.object(gen._client.messages, "create", new=AsyncMock(
+            return_value=_make_sonnet_response("Briefing text")
+        )), patch("src.briefing.generator.gmail_client") as mock_gmail_ctx:
+            mock_gmail = AsyncMock()
+            mock_gmail_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_gmail)
+            mock_gmail_ctx.return_value.__aexit__ = AsyncMock(return_value=None)
+            await gen.generate()
+
+        mock_gmail.send_email.assert_called_once()
+        call_args = mock_gmail.send_email.call_args
+        # Verify the recipient is correct (may be positional or keyword)
+        assert call_args.kwargs.get("to") == "me@example.com" or \
+               (call_args.args and call_args.args[0] == "me@example.com")
+
+    async def test_no_email_when_disabled(self) -> None:
+        config = OutputConfig(terminal=False, file=False, email_self=False)
+        engine = _make_engine()
+        gen = BriefingGenerator(engine, config)
+
+        with patch.object(gen._client.messages, "create", new=AsyncMock(
+            return_value=_make_sonnet_response()
+        )), patch("src.briefing.generator.gmail_client") as mock_gmail_ctx:
+            await gen.generate()
+
+        mock_gmail_ctx.assert_not_called()
+
+    async def test_no_email_when_recipient_empty(self) -> None:
+        config = OutputConfig(
+            terminal=False, file=False, email_self=True,
+            email_recipient="",
+        )
+        engine = _make_engine()
+        gen = BriefingGenerator(engine, config)
+
+        with patch.object(gen._client.messages, "create", new=AsyncMock(
+            return_value=_make_sonnet_response()
+        )), patch("src.briefing.generator.gmail_client") as mock_gmail_ctx:
+            await gen.generate()
+
+        mock_gmail_ctx.assert_not_called()
+
+    async def test_continues_on_email_send_failure(self) -> None:
+        config = OutputConfig(
+            terminal=False, file=False, email_self=True,
+            email_recipient="me@example.com",
+        )
+        engine = _make_engine()
+        gen = BriefingGenerator(engine, config)
+
+        with patch.object(gen._client.messages, "create", new=AsyncMock(
+            return_value=_make_sonnet_response("Text")
+        )), patch("src.briefing.generator.gmail_client") as mock_gmail_ctx:
+            mock_gmail = AsyncMock()
+            mock_gmail_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_gmail)
+            mock_gmail_ctx.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_gmail.send_email.side_effect = Exception("MCP error")
+            result = await gen.generate()  # must not raise
+
+        assert result == "Text"

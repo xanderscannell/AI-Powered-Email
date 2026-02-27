@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from anthropic import AsyncAnthropic
 
+from src.mcp.gmail_client import gmail_client
 from src.storage.models import DeadlineRecord, EmailRow, FollowUpRecord
 
 if TYPE_CHECKING:
@@ -163,6 +164,15 @@ class BriefingGenerator:
         path.write_text(header + text, encoding="utf-8")
         logger.info("Briefing written to %s", path)
 
-    async def _send_email(self, text: str, today: str) -> None:  # pragma: no cover
-        """Send briefing via Gmail MCP. Implemented in Task 7."""
-        raise NotImplementedError
+    async def _send_email(self, text: str, today: str) -> None:
+        """Send briefing via Gmail MCP to self."""
+        try:
+            async with gmail_client() as gmail:
+                await gmail.send_email(
+                    to=self._config.email_recipient,
+                    subject=f"Morning Briefing \u2014 {today}",
+                    body=text,
+                )
+            logger.info("Briefing email sent to %s", self._config.email_recipient)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Failed to send briefing email: %s", exc)
