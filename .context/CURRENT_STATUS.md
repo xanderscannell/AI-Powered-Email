@@ -5,18 +5,19 @@
 ## Current Position
 
 **Phase**: Phase 1 — Foundation & Gmail MCP Integration
-**Subphase**: 1.2 Gmail MCP Integration
-**Progress**: 15% complete
+**Subphase**: 1.3 Core Agent Loop
+**Progress**: 25% complete
 
 ## Recently Completed
 
 - Defined project architecture and tech stack in plan.txt
 - Initialized CDS prevention framework
-- **Phase 1.1 complete**: pyproject.toml (uv, Python 3.13), full src/ directory structure, .env.example, .gitignore, Makefile, conftest.py, `uv sync` verified (100 packages installed)
+- **Phase 1.1 complete**: pyproject.toml (uv, Python 3.13), full src/ directory structure, .env.example, .gitignore, Makefile, conftest.py
+- **Phase 1.2 complete**: `src/mcp/types.py` (RawEmail), `src/mcp/gmail_client.py` (GmailClient + gmail_client() context manager), 18 tests passing
 
 ## In Progress
 
-- [ ] Phase 1.2: Gmail MCP client (`src/mcp/gmail_client.py`)
+- [ ] Phase 1.3: Core agent watcher loop (`src/agent/watcher.py`)
 
 ## Next Up
 
