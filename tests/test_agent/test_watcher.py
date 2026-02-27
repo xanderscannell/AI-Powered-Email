@@ -23,12 +23,26 @@ def make_email(id: str, subject: str = "Test subject") -> RawEmail:
     )
 
 
+def make_processor() -> MagicMock:
+    p = MagicMock()
+    p.process = AsyncMock()
+    return p
+
+
 def make_gmail_mock(*email_batches: list[RawEmail]) -> MagicMock:
     """Mock GmailClient whose get_unread_emails() returns successive batches."""
     gmail = MagicMock()
     gmail.ensure_ai_labels = AsyncMock()
+    gmail.get_unread_email_ids = AsyncMock(return_value=[])
     gmail.get_unread_emails = AsyncMock(side_effect=list(email_batches))
     return gmail
+
+
+def make_watcher(processor: MagicMock | None = None, **kwargs: object) -> tuple[EmailWatcher, MagicMock]:
+    """Return (watcher, processor) with a factory that always returns the same processor."""
+    proc = processor or make_processor()
+    watcher = EmailWatcher(processor_factory=lambda _: proc, **kwargs)  # type: ignore[arg-type]
+    return watcher, proc
 
 
 # ── Protocol conformance ───────────────────────────────────────────────────────
@@ -60,78 +74,62 @@ class TestNoOpProcessor:
 
 class TestPoll:
     async def test_new_emails_are_passed_to_processor(self) -> None:
-        processor = MagicMock()
-        processor.process = AsyncMock()
-        watcher = EmailWatcher(processor=processor, poll_interval=1)
-
+        watcher, processor = make_watcher(poll_interval=1)
         emails = [make_email("a"), make_email("b")]
         gmail = make_gmail_mock(emails)
 
-        await watcher._poll(gmail)
+        await watcher._poll(gmail, processor)
 
         assert processor.process.call_count == 2
         calls = {c.args[0].id for c in processor.process.call_args_list}
         assert calls == {"a", "b"}
 
     async def test_already_processed_ids_are_skipped(self) -> None:
-        processor = MagicMock()
-        processor.process = AsyncMock()
-        watcher = EmailWatcher(processor=processor, poll_interval=1)
+        watcher, processor = make_watcher(poll_interval=1)
         watcher._processed_ids = {"a", "b"}
+        gmail = make_gmail_mock([make_email("a"), make_email("b"), make_email("c")])
 
-        emails = [make_email("a"), make_email("b"), make_email("c")]
-        gmail = make_gmail_mock(emails)
-
-        await watcher._poll(gmail)
+        await watcher._poll(gmail, processor)
 
         processor.process.assert_called_once()
         assert processor.process.call_args.args[0].id == "c"
 
     async def test_empty_inbox_calls_no_processor(self) -> None:
-        processor = MagicMock()
-        processor.process = AsyncMock()
-        watcher = EmailWatcher(processor=processor, poll_interval=1)
-
+        watcher, processor = make_watcher(poll_interval=1)
         gmail = make_gmail_mock([])
-        await watcher._poll(gmail)
+
+        await watcher._poll(gmail, processor)
 
         processor.process.assert_not_called()
 
     async def test_processed_ids_accumulate_after_poll(self) -> None:
-        processor = MagicMock()
-        processor.process = AsyncMock()
-        watcher = EmailWatcher(processor=processor, poll_interval=1)
+        watcher, processor = make_watcher(poll_interval=1)
+        gmail = make_gmail_mock([make_email("x"), make_email("y")])
 
-        emails = [make_email("x"), make_email("y")]
-        gmail = make_gmail_mock(emails)
-
-        await watcher._poll(gmail)
+        await watcher._poll(gmail, processor)
 
         assert "x" in watcher._processed_ids
         assert "y" in watcher._processed_ids
 
     async def test_processor_failure_still_marks_email_as_seen(self) -> None:
         """A crashing processor must not cause infinite retries."""
-        processor = MagicMock()
+        processor = make_processor()
         processor.process = AsyncMock(side_effect=RuntimeError("boom"))
-        watcher = EmailWatcher(processor=processor, poll_interval=1)
-
+        watcher, _ = make_watcher(processor=processor, poll_interval=1)
         gmail = make_gmail_mock([make_email("bad")])
-        await watcher._poll(gmail)  # must not raise
+
+        await watcher._poll(gmail, processor)  # must not raise
 
         assert "bad" in watcher._processed_ids
 
     async def test_second_poll_skips_first_batch(self) -> None:
-        processor = MagicMock()
-        processor.process = AsyncMock()
-        watcher = EmailWatcher(processor=processor, poll_interval=1)
-
+        watcher, processor = make_watcher(poll_interval=1)
         batch1 = [make_email("a"), make_email("b")]
         batch2 = [make_email("a"), make_email("b"), make_email("c")]
         gmail = make_gmail_mock(batch1, batch2)
 
-        await watcher._poll(gmail)
-        await watcher._poll(gmail)
+        await watcher._poll(gmail, processor)
+        await watcher._poll(gmail, processor)
 
         # 2 from first poll + 1 new from second poll = 3 total calls
         assert processor.process.call_count == 3
@@ -142,7 +140,7 @@ class TestPoll:
 
 class TestSeedProcessedIds:
     async def test_seeds_all_returned_ids(self) -> None:
-        watcher = EmailWatcher(processor=NoOpProcessor(), poll_interval=1)
+        watcher, _ = make_watcher(poll_interval=1)
         gmail = MagicMock()
         gmail.get_unread_email_ids = AsyncMock(return_value=["a", "b", "c"])
 
@@ -151,7 +149,7 @@ class TestSeedProcessedIds:
         assert watcher._processed_ids == {"a", "b", "c"}
 
     async def test_empty_inbox_seeds_nothing(self) -> None:
-        watcher = EmailWatcher(processor=NoOpProcessor(), poll_interval=1)
+        watcher, _ = make_watcher(poll_interval=1)
         gmail = MagicMock()
         gmail.get_unread_email_ids = AsyncMock(return_value=[])
 
@@ -161,22 +159,17 @@ class TestSeedProcessedIds:
 
     async def test_seeded_ids_are_skipped_on_first_poll(self) -> None:
         """Emails that existed before startup must never reach the processor."""
-        processor = MagicMock()
-        processor.process = AsyncMock()
-        watcher = EmailWatcher(processor=processor, poll_interval=1)
-
+        watcher, processor = make_watcher(poll_interval=1)
         pre_existing = [make_email("old_1"), make_email("old_2")]
         new_arrival = make_email("new_1")
 
         gmail = MagicMock()
         gmail.get_unread_email_ids = AsyncMock(return_value=["old_1", "old_2"])
-        # First poll sees pre-existing + new arrival
         gmail.get_unread_emails = AsyncMock(return_value=[*pre_existing, new_arrival])
 
         await watcher._seed_processed_ids(gmail)
-        await watcher._poll(gmail)
+        await watcher._poll(gmail, processor)
 
-        # Only the new arrival should reach the processor
         processor.process.assert_called_once()
         assert processor.process.call_args.args[0].id == "new_1"
 
@@ -186,14 +179,12 @@ class TestSeedProcessedIds:
 
 class TestInterruptibleSleep:
     async def test_returns_early_when_stopped(self) -> None:
-        watcher = EmailWatcher(processor=NoOpProcessor(), poll_interval=60)
+        watcher, _ = make_watcher(poll_interval=60)
         watcher._stop_event.set()
-        # Should return almost instantly despite 60s timeout
         await asyncio.wait_for(watcher._interruptible_sleep(60), timeout=1.0)
 
     async def test_waits_full_duration_when_not_stopped(self) -> None:
-        watcher = EmailWatcher(processor=NoOpProcessor(), poll_interval=1)
-        # Should complete in ~0.05s without raising
+        watcher, _ = make_watcher(poll_interval=1)
         await asyncio.wait_for(watcher._interruptible_sleep(0.05), timeout=1.0)
 
 
@@ -202,7 +193,7 @@ class TestInterruptibleSleep:
 
 class TestStop:
     def test_stop_sets_event(self) -> None:
-        watcher = EmailWatcher(processor=NoOpProcessor(), poll_interval=1)
+        watcher, _ = make_watcher(poll_interval=1)
         assert not watcher._stop_event.is_set()
         watcher.stop()
         assert watcher._stop_event.is_set()
@@ -213,20 +204,12 @@ class TestStop:
 
 class TestRun:
     async def test_run_exits_cleanly_after_stop(self) -> None:
-        processor = MagicMock()
-        processor.process = AsyncMock()
-        watcher = EmailWatcher(processor=processor, poll_interval=60)
+        watcher, _ = make_watcher(poll_interval=60)
 
-        # gmail_client context manager that yields a mock and then stop()s the watcher
         gmail_mock = MagicMock()
         gmail_mock.ensure_ai_labels = AsyncMock()
+        gmail_mock.get_unread_email_ids = AsyncMock(return_value=[])
         gmail_mock.get_unread_emails = AsyncMock(return_value=[])
-        gmail_mock.__aenter__ = AsyncMock(return_value=gmail_mock)
-        gmail_mock.__aexit__ = AsyncMock(return_value=False)
-
-        async def patched_gmail_client(**_: object) -> object:
-            watcher.stop()  # trigger stop after first successful connection
-            return gmail_mock
 
         with patch("src.agent.watcher.gmail_client") as mock_ctx:
             mock_ctx.return_value.__aenter__ = AsyncMock(
@@ -240,10 +223,7 @@ class TestRun:
         """Verifies gmail_client() is called again after an MCPError."""
         from src.mcp.gmail_client import MCPError
 
-        processor = MagicMock()
-        processor.process = AsyncMock()
-        watcher = EmailWatcher(processor=processor, poll_interval=60)
-
+        watcher, _ = make_watcher(poll_interval=60)
         call_count = 0
 
         class FakeContext:
@@ -252,10 +232,10 @@ class TestRun:
                 call_count += 1
                 if call_count == 1:
                     raise MCPError("connection refused")
-                # Second call: stop the watcher so run() exits
                 watcher.stop()
                 m = MagicMock()
                 m.ensure_ai_labels = AsyncMock()
+                m.get_unread_email_ids = AsyncMock(return_value=[])
                 m.get_unread_emails = AsyncMock(return_value=[])
                 return m
 

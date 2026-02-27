@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import signal
+from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
 from dotenv import load_dotenv
@@ -22,11 +23,7 @@ _MAX_BACKOFF_SECONDS = 300
 
 @runtime_checkable
 class EmailProcessor(Protocol):
-    """Interface for the email processing pipeline.
-
-    Phase 2 will implement this with the Haiku analyser.  For now,
-    NoOpProcessor is used as the placeholder.
-    """
+    """Interface for the email processing pipeline."""
 
     async def process(self, email: RawEmail) -> None:
         """Process a single email (analyse, store, label).
@@ -37,11 +34,15 @@ class EmailProcessor(Protocol):
         ...
 
 
-class NoOpProcessor:
-    """Stub processor used until Phase 2 (Haiku analysis) is implemented.
+#: Factory that creates a fresh processor bound to a live GmailClient.
+#: Called once per (re)connection so the processor always holds a valid client.
+ProcessorFactory = Callable[[GmailClient], EmailProcessor]
 
-    Logs each email so you can verify the watcher loop is working end-to-end
-    without needing a real analyser in place.
+
+class NoOpProcessor:
+    """Stub processor — logs each email without calling Haiku or touching Gmail.
+
+    Useful for end-to-end wiring tests before Phase 2 analysis is active.
     """
 
     async def process(self, email: RawEmail) -> None:
@@ -62,23 +63,26 @@ class EmailWatcher:
     Reconnects automatically on MCP failures using exponential backoff so the
     agent can run unattended across transient network or subprocess issues.
 
-    Processed email IDs are tracked in an in-memory set for this phase.
-    Phase 3 will replace this with SQLite-backed persistence so IDs survive
-    restarts.
+    The processor is created via a factory on each (re)connection so it always
+    holds a reference to the live GmailClient.  Processed email IDs survive
+    reconnects in the in-memory set (Phase 3 will persist them to SQLite).
 
     Usage::
 
-        watcher = EmailWatcher(processor=NoOpProcessor())
-        await watcher.run()          # blocks until stop() is called
+        analyzer = EmailAnalyzer()
+        watcher = EmailWatcher(
+            processor_factory=lambda gmail: AnalysisProcessor(analyzer, gmail)
+        )
+        await watcher.run()
     """
 
     def __init__(
         self,
-        processor: EmailProcessor,
+        processor_factory: ProcessorFactory,
         poll_interval: int | None = None,
         max_results_per_poll: int = 50,
     ) -> None:
-        self._processor = processor
+        self._processor_factory = processor_factory
         self._poll_interval = poll_interval or int(
             os.environ.get("POLL_INTERVAL_SECONDS", "60")
         )
@@ -154,13 +158,14 @@ class EmailWatcher:
         )
 
     async def _loop(self, gmail: GmailClient) -> None:
-        """Inner poll loop — runs until stop() is called or an exception escapes."""
+        """Create a fresh processor, seed processed IDs, then poll until stopped."""
+        processor = self._processor_factory(gmail)
         await self._seed_processed_ids(gmail)
         while not self._stop_event.is_set():
-            await self._poll(gmail)
+            await self._poll(gmail, processor)
             await self._interruptible_sleep(self._poll_interval)
 
-    async def _poll(self, gmail: GmailClient) -> None:
+    async def _poll(self, gmail: GmailClient, processor: EmailProcessor) -> None:
         """Fetch unread emails, skip already-seen IDs, and run the processor."""
         emails = await gmail.get_unread_emails(max_results=self._max_results)
         new = [e for e in emails if e.id not in self._processed_ids]
@@ -172,7 +177,7 @@ class EmailWatcher:
         logger.info("Poll: %d new email(s) to process", len(new))
         for email in new:
             try:
-                await self._processor.process(email)
+                await processor.process(email)
             except Exception as exc:  # noqa: BLE001
                 logger.error(
                     "Processor failed on email %s: %s",
@@ -215,7 +220,12 @@ def main() -> None:
 
 async def _amain() -> None:
     """Async entry point: wire up signal handlers and run the watcher."""
-    watcher = EmailWatcher(processor=NoOpProcessor())
+    from src.processing.analyzer import AnalysisProcessor, EmailAnalyzer
+
+    analyzer = EmailAnalyzer()
+    watcher = EmailWatcher(
+        processor_factory=lambda gmail: AnalysisProcessor(analyzer, gmail)
+    )
 
     loop = asyncio.get_running_loop()
     try:

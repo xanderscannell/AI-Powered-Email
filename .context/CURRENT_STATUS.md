@@ -4,37 +4,38 @@
 
 ## Current Position
 
-**Phase**: Phase 1 — Foundation & Gmail MCP Integration
-**Subphase**: Phase 2 — Processing Layer
-**Progress**: 35% complete (Phase 1 complete)
+**Phase**: Phase 2 — Processing Layer
+**Subphase**: Complete — ready for Phase 3
+**Progress**: 50% complete
 
 ## Recently Completed
 
 - Defined project architecture and tech stack in plan.txt
 - Initialized CDS prevention framework
 - **Phase 1.1 complete**: pyproject.toml (uv, Python 3.13), full src/ directory structure, .env.example, .gitignore, Makefile, conftest.py
-- **Phase 1.2 complete**: `src/mcp/types.py` (RawEmail), `src/mcp/gmail_client.py` (GmailClient + gmail_client() context manager), 18 tests passing
-- **Phase 1.3 complete**: `src/agent/watcher.py` (EmailWatcher + EmailProcessor protocol + NoOpProcessor + main()), 14 tests passing. 32 total tests green.
+- **Phase 1.2 complete**: `src/mcp/types.py` (RawEmail), `src/mcp/gmail_client.py` (GmailClient + gmail_client() context manager), 22 tests
+- **Phase 1.3 complete**: `src/agent/watcher.py` (EmailWatcher + EmailProcessor protocol + NoOpProcessor + main()), 17 tests
+- **Startup seed**: `get_unread_email_ids()` + `_seed_processed_ids()` — prevents processing historical emails on first run
+- **Phase 2 complete**: `src/processing/types.py` (Priority, Intent, EmailAnalysis), `src/processing/prompts.py` (ANALYSIS_TOOL schema, build_messages), `src/processing/analyzer.py` (EmailAnalyzer + AnalysisProcessor). Processor factory pattern wires gmail_client lifecycle. 83 tests total, all green.
 
 ## In Progress
 
-- [ ] Phase 2.1: EmailAnalysis types (`src/processing/types.py`)
+None — Phase 2 complete.
 
 ## Next Up
 
-1. Create Python project structure with pyproject.toml and uv/pip setup
-2. Configure Gmail MCP server connection
-3. Implement basic email watcher loop (fetch new emails via Gmail MCP)
-4. Wire up Haiku API for first-pass email analysis (sentiment, intent, priority, entities, summary)
-5. Write analyzed results back to Gmail as labels/stars
+1. Phase 3: Storage Layer
+   - `src/storage/vector_store.py` — ChromaDB, embed email body+summary, store with email_id+metadata
+   - `src/storage/database.py` — SQLite, store EmailAnalysis rows (email_id, priority, intent, sentiment, requires_reply, deadline, entities, summary, timestamp)
+   - Fan-out writes in `AnalysisProcessor.process()`: Gmail labels + ChromaDB + SQLite simultaneously
 
 ## Active Files and Modules
 
 ```
 src/
-├── agent/          [status: not started]
-├── mcp/            [status: not started]
-├── processing/     [status: not started]
+├── agent/          [status: done — watcher.py]
+├── mcp/            [status: done — types.py, gmail_client.py]
+├── processing/     [status: done — types.py, prompts.py, analyzer.py]
 ├── storage/        [status: not started]
 ├── briefing/       [status: not started]
 └── cli/            [status: not started]
