@@ -5,6 +5,7 @@ import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from typing import Any
 
 from mcp import ClientSession
@@ -103,8 +104,6 @@ class GmailClient:
         Uses Gmail's ``after:YYYY/MM/DD`` search operator. The max_results cap
         defaults to 500 — the same limit used for startup ID seeding.
         """
-        from datetime import datetime, timedelta
-
         since = (datetime.now() - timedelta(days=days)).strftime("%Y/%m/%d")
         summaries = await self._call(
             "search_gmail_messages",

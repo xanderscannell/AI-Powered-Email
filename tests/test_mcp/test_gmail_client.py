@@ -393,5 +393,5 @@ class TestGetEmailsSince:
         session.call_tool = AsyncMock(return_value=_tool_result([]))
         await client.get_emails_since(days=30)
         call_args = session.call_tool.call_args_list[0]
-        arguments = call_args[0][1]
+        arguments = call_args.args[1]
         assert "after:" in arguments["query"]
