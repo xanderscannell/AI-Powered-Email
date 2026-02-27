@@ -305,3 +305,39 @@ class TestGetStoredIdsSince:
         db.save(email, make_analysis())
         result = db.get_stored_ids_since(days=30)
         assert isinstance(result, set)
+
+
+# ── get_urgent_emails ───────────────────────────────────────────────────────────
+
+
+class TestGetUrgentEmails:
+    def test_returns_critical_and_high_emails(self, db: EmailDatabase) -> None:
+        db.save(make_email("critical_1"), make_analysis("critical_1", priority=Priority.CRITICAL))
+        db.save(make_email("high_1"), make_analysis("high_1", priority=Priority.HIGH))
+        db.save(make_email("medium_1"), make_analysis("medium_1", priority=Priority.MEDIUM))
+
+        results = db.get_urgent_emails()
+        result_ids = {r.id for r in results}
+        assert "critical_1" in result_ids
+        assert "high_1" in result_ids
+        assert "medium_1" not in result_ids
+
+    def test_returns_list_of_email_rows(self, db: EmailDatabase) -> None:
+        db.save(make_email("high_1"), make_analysis("high_1", priority=Priority.HIGH))
+
+        results = db.get_urgent_emails()
+        assert len(results) == 1
+        assert isinstance(results[0], EmailRow)
+
+    def test_returns_empty_when_no_urgent_emails(self, db: EmailDatabase) -> None:
+        db.save(make_email("low_1"), make_analysis("low_1", priority=Priority.LOW))
+
+        results = db.get_urgent_emails()
+        assert results == []
+
+    def test_orders_by_priority_then_recency(self, db: EmailDatabase) -> None:
+        db.save(make_email("high_1"), make_analysis("high_1", priority=Priority.HIGH))
+        db.save(make_email("critical_1"), make_analysis("critical_1", priority=Priority.CRITICAL))
+
+        results = db.get_urgent_emails()
+        assert results[0].id == "critical_1"

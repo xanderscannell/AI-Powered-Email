@@ -113,6 +113,25 @@ class EmailDatabase:
         d["requires_reply"] = bool(d["requires_reply"])
         return EmailRow(**d)
 
+    def get_urgent_emails(self, hours: int = 24) -> list[EmailRow]:
+        """Return CRITICAL and HIGH priority emails processed within the last N hours."""
+        rows = self._conn.execute(
+            """SELECT id, thread_id, sender, subject, snippet, body, date,
+                      sentiment, intent, priority, summary, requires_reply,
+                      deadline, entities, processed_at
+               FROM emails
+               WHERE priority <= 2
+                 AND processed_at >= datetime('now', ?)
+               ORDER BY priority ASC, processed_at DESC""",
+            (f"-{hours} hours",),
+        ).fetchall()
+        result = []
+        for row in rows:
+            d = dict(row)
+            d["requires_reply"] = bool(d["requires_reply"])
+            result.append(EmailRow(**d))
+        return result
+
     def get_stored_ids_since(self, days: int) -> set[str]:
         """Return IDs of emails processed within the last N days.
 
