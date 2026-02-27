@@ -273,3 +273,35 @@ class TestGetEmailById:
         assert row.body is None
         assert row.date is None
         assert row.deadline is None
+
+
+# ── get_stored_ids_since ────────────────────────────────────────────────────────
+
+
+class TestGetStoredIdsSince:
+    def test_returns_recently_processed_id(self, db: EmailDatabase) -> None:
+        email = make_email()
+        db.save(email, make_analysis())
+        ids = db.get_stored_ids_since(days=30)
+        assert email.id in ids
+
+    def test_returns_empty_set_when_no_emails(self, db: EmailDatabase) -> None:
+        assert db.get_stored_ids_since(days=30) == set()
+
+    def test_excludes_emails_older_than_window(self, db: EmailDatabase) -> None:
+        email = make_email()
+        db.save(email, make_analysis())
+        # Backdate processed_at to 60 days ago
+        db._conn.execute(
+            "UPDATE emails SET processed_at = datetime('now', '-60 days') WHERE id = ?",
+            (email.id,),
+        )
+        db._conn.commit()
+        ids = db.get_stored_ids_since(days=30)
+        assert email.id not in ids
+
+    def test_returns_set_not_list(self, db: EmailDatabase) -> None:
+        email = make_email()
+        db.save(email, make_analysis())
+        result = db.get_stored_ids_since(days=30)
+        assert isinstance(result, set)

@@ -113,6 +113,17 @@ class EmailDatabase:
         d["requires_reply"] = bool(d["requires_reply"]) if d["requires_reply"] is not None else False
         return EmailRow(**d)
 
+    def get_stored_ids_since(self, days: int) -> set[str]:
+        """Return IDs of emails processed within the last N days.
+
+        Uses SQLite's own datetime arithmetic so there is no UTC/local-time mismatch.
+        """
+        rows = self._conn.execute(
+            "SELECT id FROM emails WHERE processed_at >= datetime('now', ?)",
+            (f"-{days} days",),
+        ).fetchall()
+        return {row["id"] for row in rows}
+
     # ── Private ─────────────────────────────────────────────────────────────────
 
     def _create_tables(self) -> None:
