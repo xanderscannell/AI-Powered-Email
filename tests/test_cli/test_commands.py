@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
 
 from src.storage.models import EmailRow
 from src.storage.vector_store import SearchResult
@@ -50,8 +50,7 @@ def _make_row(email_id: str = "msg_1") -> EmailRow:
     )
 
 
-def _invoke(engine: MagicMock, *args: str) -> "CliRunner":
-    from click.testing import CliRunner
+def _invoke(engine: MagicMock, *args: str) -> Result:
     from src.cli.main import cli
 
     runner = CliRunner()
