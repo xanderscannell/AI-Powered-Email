@@ -137,6 +137,50 @@ class TestPoll:
         assert processor.process.call_count == 3
 
 
+# ── EmailWatcher._seed_processed_ids ──────────────────────────────────────────
+
+
+class TestSeedProcessedIds:
+    async def test_seeds_all_returned_ids(self) -> None:
+        watcher = EmailWatcher(processor=NoOpProcessor(), poll_interval=1)
+        gmail = MagicMock()
+        gmail.get_unread_email_ids = AsyncMock(return_value=["a", "b", "c"])
+
+        await watcher._seed_processed_ids(gmail)
+
+        assert watcher._processed_ids == {"a", "b", "c"}
+
+    async def test_empty_inbox_seeds_nothing(self) -> None:
+        watcher = EmailWatcher(processor=NoOpProcessor(), poll_interval=1)
+        gmail = MagicMock()
+        gmail.get_unread_email_ids = AsyncMock(return_value=[])
+
+        await watcher._seed_processed_ids(gmail)
+
+        assert watcher._processed_ids == set()
+
+    async def test_seeded_ids_are_skipped_on_first_poll(self) -> None:
+        """Emails that existed before startup must never reach the processor."""
+        processor = MagicMock()
+        processor.process = AsyncMock()
+        watcher = EmailWatcher(processor=processor, poll_interval=1)
+
+        pre_existing = [make_email("old_1"), make_email("old_2")]
+        new_arrival = make_email("new_1")
+
+        gmail = MagicMock()
+        gmail.get_unread_email_ids = AsyncMock(return_value=["old_1", "old_2"])
+        # First poll sees pre-existing + new arrival
+        gmail.get_unread_emails = AsyncMock(return_value=[*pre_existing, new_arrival])
+
+        await watcher._seed_processed_ids(gmail)
+        await watcher._poll(gmail)
+
+        # Only the new arrival should reach the processor
+        processor.process.assert_called_once()
+        assert processor.process.call_args.args[0].id == "new_1"
+
+
 # ── EmailWatcher._interruptible_sleep ─────────────────────────────────────────
 
 

@@ -106,6 +106,39 @@ class TestParseEmail:
         assert email.body is None
 
 
+# ── get_unread_email_ids ───────────────────────────────────────────────────────
+
+
+class TestGetUnreadEmailIds:
+    async def test_returns_list_of_ids(self, client: GmailClient, session: MagicMock) -> None:
+        session.call_tool.return_value = _tool_result([
+            {"message_id": "id_1", "subject": "A"},
+            {"message_id": "id_2", "subject": "B"},
+        ])
+        ids = await client.get_unread_email_ids()
+        assert ids == ["id_1", "id_2"]
+
+    async def test_empty_inbox_returns_empty_list(self, client: GmailClient, session: MagicMock) -> None:
+        session.call_tool.return_value = _tool_result([])
+        ids = await client.get_unread_email_ids()
+        assert ids == []
+
+    async def test_drops_entries_without_message_id(self, client: GmailClient, session: MagicMock) -> None:
+        session.call_tool.return_value = _tool_result([
+            {"message_id": "id_1"},
+            {"subject": "no id here"},
+            {"message_id": "id_3"},
+        ])
+        ids = await client.get_unread_email_ids()
+        assert ids == ["id_1", "id_3"]
+
+    async def test_passes_max_results_to_search(self, client: GmailClient, session: MagicMock) -> None:
+        session.call_tool.return_value = _tool_result([])
+        await client.get_unread_email_ids(max_results=123)
+        call_args = session.call_tool.call_args
+        assert call_args.args[1]["max_results"] == 123
+
+
 # ── get_unread_emails ──────────────────────────────────────────────────────────
 
 

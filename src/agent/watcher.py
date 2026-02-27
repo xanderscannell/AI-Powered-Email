@@ -134,8 +134,28 @@ class EmailWatcher:
 
     # ── Internal ───────────────────────────────────────────────────────────────
 
+    async def _seed_processed_ids(self, gmail: GmailClient) -> None:
+        """Mark all currently-unread emails as seen without processing them.
+
+        Called once at startup so the agent doesn't immediately hammer the
+        Haiku API with years of backlogged emails.  Only emails that arrive
+        *after* this seed call will be processed.
+
+        Note: workspace-mcp caps search results at 500.  Inboxes with more
+        than 500 unread emails will have the oldest ones fall through to the
+        first poll, where they'll be processed normally.  For intentional
+        historical processing use `email backfill --days N` (Phase 4).
+        """
+        ids = await gmail.get_unread_email_ids()
+        self._processed_ids.update(ids)
+        logger.info(
+            "Startup: seeded %d pre-existing unread ID(s) — they will not be processed",
+            len(ids),
+        )
+
     async def _loop(self, gmail: GmailClient) -> None:
         """Inner poll loop — runs until stop() is called or an exception escapes."""
+        await self._seed_processed_ids(gmail)
         while not self._stop_event.is_set():
             await self._poll(gmail)
             await self._interruptible_sleep(self._poll_interval)

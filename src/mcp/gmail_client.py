@@ -55,6 +55,25 @@ class GmailClient:
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
+    async def get_unread_email_ids(self, max_results: int = 500) -> list[str]:
+        """Return only the IDs of unread emails — no content fetch.
+
+        Used on startup to seed the processed-ID set without burning API calls.
+        The default limit of 500 is intentionally higher than the polling limit
+        to capture as much of the existing backlog as possible in one shot.
+        """
+        summaries = await self._call(
+            "search_gmail_messages",
+            {"query": "is:unread", "max_results": max_results},
+        )
+        if not isinstance(summaries, list):
+            return []
+        return [
+            str(m.get("message_id", ""))
+            for m in summaries
+            if isinstance(m, dict) and m.get("message_id")
+        ]
+
     async def get_unread_emails(self, max_results: int = 50) -> list[RawEmail]:
         """Return unread emails with full body content.
 
