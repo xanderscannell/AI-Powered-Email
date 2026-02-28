@@ -185,24 +185,16 @@ class EmailDatabase:
         )
 
     def _upsert_contact(self, email: RawEmail, analysis: EmailAnalysis) -> None:
-        existing = self._conn.execute(
-            "SELECT total_emails FROM contacts WHERE email_address = ?",
-            (email.sender,),
-        ).fetchone()
-
-        if existing:
-            self._conn.execute(
-                """UPDATE contacts
-                   SET total_emails = ?, last_contact = ?
-                   WHERE email_address = ?""",
-                (existing["total_emails"] + 1, email.date, email.sender),
-            )
-        else:
-            self._conn.execute(
-                """INSERT INTO contacts (email_address, total_emails, last_contact)
-                   VALUES (?, 1, ?)""",
-                (email.sender, email.date),
-            )
+        self._conn.execute(
+            """
+            INSERT INTO contacts (email_address, total_emails, last_contact)
+            VALUES (?, 1, ?)
+            ON CONFLICT(email_address) DO UPDATE SET
+                total_emails = total_emails + 1,
+                last_contact = excluded.last_contact
+            """,
+            (email.sender, email.date),
+        )
 
     def _insert_follow_up(self, email_id: str) -> None:
         self._conn.execute(

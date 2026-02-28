@@ -162,10 +162,10 @@ class TestFollowUps:
         db.save(make_email("a"), make_analysis("a", requires_reply=True))
         db.save(make_email("b"), make_analysis("b", requires_reply=True))
         # Manually mark one as done
-        db._conn.execute(
-            "UPDATE follow_ups SET status = 'done' WHERE email_id = 'b'"
-        )
-        db._conn.commit()
+        with db._conn:
+            db._conn.execute(
+                "UPDATE follow_ups SET status = 'done' WHERE email_id = 'b'"
+            )
 
         pending = db.get_follow_ups(status="pending")
         done = db.get_follow_ups(status="done")
@@ -199,8 +199,8 @@ class TestDeadlines:
 
     def test_only_open_deadlines_returned(self, db: EmailDatabase) -> None:
         db.save(make_email(), make_analysis(deadline="by Friday"))
-        db._conn.execute("UPDATE deadlines SET status = 'done'")
-        db._conn.commit()
+        with db._conn:
+            db._conn.execute("UPDATE deadlines SET status = 'done'")
 
         assert db.get_open_deadlines() == []
 
@@ -269,11 +269,11 @@ class TestGetStoredIdsSince:
         email = make_email()
         db.save(email, make_analysis())
         # Backdate processed_at to 60 days ago
-        db._conn.execute(
-            "UPDATE emails SET processed_at = datetime('now', '-60 days') WHERE id = ?",
-            (email.id,),
-        )
-        db._conn.commit()
+        with db._conn:
+            db._conn.execute(
+                "UPDATE emails SET processed_at = datetime('now', '-60 days') WHERE id = ?",
+                (email.id,),
+            )
         ids = db.get_stored_ids_since(days=30)
         assert email.id not in ids
 
