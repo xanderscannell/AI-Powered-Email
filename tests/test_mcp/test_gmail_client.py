@@ -73,7 +73,7 @@ class TestParseEmail:
             "date": "2026-02-27T09:00:00Z",
             "web_link": "https://mail.google.com/...",
         }
-        email = GmailClient._parse_email(data)
+        email = GmailClient._parse_email_dict(data)
         assert email.id == "msg_001"
         assert email.thread_id == "thread_001"
         assert email.sender == "alice@example.com"
@@ -91,18 +91,18 @@ class TestParseEmail:
             "subject": "Quick question",
             "snippet": "Hey, do you...",
         }
-        email = GmailClient._parse_email(data)
+        email = GmailClient._parse_email_dict(data)
         assert email.body is None
         assert email.recipient is None
         assert email.date is None
         assert email.labels == []
 
     def test_missing_subject_uses_default(self) -> None:
-        email = GmailClient._parse_email({"message_id": "x", "thread_id": "y", "from": "z"})
+        email = GmailClient._parse_email_dict({"message_id": "x", "thread_id": "y", "from": "z"})
         assert email.subject == "(no subject)"
 
     def test_empty_body_maps_to_none(self) -> None:
-        email = GmailClient._parse_email({"message_id": "x", "thread_id": "y", "from": "z", "body": ""})
+        email = GmailClient._parse_email_dict({"message_id": "x", "thread_id": "y", "from": "z", "body": ""})
         assert email.body is None
 
 
@@ -136,7 +136,7 @@ class TestGetUnreadEmailIds:
         session.call_tool.return_value = _tool_result([])
         await client.get_unread_email_ids(max_results=123)
         call_args = session.call_tool.call_args
-        assert call_args.args[1]["max_results"] == 123
+        assert call_args.args[1]["page_size"] == 123
 
 
 # ── get_unread_emails ──────────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ class TestGetUnreadEmails:
         session.call_tool.side_effect = [_tool_result([]), _tool_result([])]
         await client.get_unread_emails(max_results=10)
         first_call = session.call_tool.call_args_list[0]
-        assert first_call.args[1]["max_results"] == 10
+        assert first_call.args[1]["page_size"] == 10
 
 
 # ── get_email ──────────────────────────────────────────────────────────────────
@@ -213,7 +213,8 @@ class TestApplyLabel:
 
         session.call_tool.assert_called_once_with(
             "modify_gmail_message_labels",
-            {"message_id": "msg_1", "label_ids_to_add": ["lbl_priority_high"]},
+            {"message_id": "msg_1", "add_label_ids": ["lbl_priority_high"],
+             "user_google_email": "test@example.com"},
         )
 
     async def test_creates_missing_label_then_applies(
@@ -242,7 +243,8 @@ class TestRemoveLabel:
 
         session.call_tool.assert_called_once_with(
             "modify_gmail_message_labels",
-            {"message_id": "msg_1", "label_ids_to_remove": ["lbl_existing"]},
+            {"message_id": "msg_1", "remove_label_ids": ["lbl_existing"],
+             "user_google_email": "test@example.com"},
         )
 
     async def test_no_op_when_label_not_found(self, client: GmailClient, session: MagicMock) -> None:
@@ -263,7 +265,8 @@ class TestStarEmail:
 
         session.call_tool.assert_called_once_with(
             "modify_gmail_message_labels",
-            {"message_id": "msg_1", "label_ids_to_add": ["STARRED"]},
+            {"message_id": "msg_1", "add_label_ids": ["STARRED"],
+             "user_google_email": "test@example.com"},
         )
 
 
@@ -338,7 +341,7 @@ class TestEnsureAiLabels:
             if c.args[0] == "manage_gmail_label"
         ]
         assert len(manage_calls) == len(missing)
-        created_names = {c.args[1]["label_name"] for c in manage_calls}
+        created_names = {c.args[1]["name"] for c in manage_calls}
         assert created_names == set(missing)
 
 

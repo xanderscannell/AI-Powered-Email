@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 def cli(ctx: click.Context) -> None:
     """AI-powered email agent — search, status, and backfill commands."""
-    load_dotenv()
+    load_dotenv(override=True)
     logging.basicConfig(
         level=logging.WARNING,  # keep CLI output clean; errors still surface
         format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",

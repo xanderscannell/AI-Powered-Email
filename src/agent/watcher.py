@@ -4,8 +4,8 @@ import asyncio
 import logging
 import os
 import signal
-from collections.abc import Callable
-from typing import Protocol, runtime_checkable
+from collections.abc import Callable, Coroutine
+from typing import Any, Protocol, runtime_checkable
 
 from dotenv import load_dotenv
 
@@ -89,6 +89,8 @@ class EmailWatcher:
         self._max_results = max_results_per_poll
         self._processed_ids: set[str] = set()  # Phase 3: replace with SQLite
         self._stop_event = asyncio.Event()
+        self.on_first_connect: Callable[[], Any] | None = None
+        self._first_connect_fired = False
 
     def stop(self) -> None:
         """Signal the watcher to finish the current poll and shut down cleanly."""
@@ -107,6 +109,11 @@ class EmailWatcher:
                     logger.info("Connected to Gmail MCP — running ensure_ai_labels")
                     await gmail.ensure_ai_labels()
                     attempt = 0  # reset backoff counter on successful connect
+                    if not self._first_connect_fired and self.on_first_connect:
+                        self._first_connect_fired = True
+                        result = self.on_first_connect()
+                        if asyncio.iscoroutine(result):
+                            await result
                     await self._loop(gmail)
             except MCPError as exc:
                 if self._stop_event.is_set():
@@ -167,11 +174,20 @@ class EmailWatcher:
 
     async def _poll(self, gmail: GmailClient, processor: EmailProcessor) -> None:
         """Fetch unread emails, skip already-seen IDs, and run the processor."""
+        # Lightweight ID-only check first to avoid fetching full content needlessly
+        all_ids = await gmail.get_unread_email_ids(max_results=self._max_results)
+        new_ids = [eid for eid in all_ids if eid not in self._processed_ids]
+
+        if not new_ids:
+            logger.info("Poll: 0 new emails (%d total unread)", len(all_ids))
+            return
+
+        # Only fetch full content for genuinely new emails
         emails = await gmail.get_unread_emails(max_results=self._max_results)
         new = [e for e in emails if e.id not in self._processed_ids]
 
         if not new:
-            logger.debug("Poll: 0 new emails (%d total unread)", len(emails))
+            logger.info("Poll: 0 new emails after content fetch")
             return
 
         logger.info("Poll: %d new email(s) to process", len(new))
@@ -203,7 +219,7 @@ class EmailWatcher:
 
 def main() -> None:
     """Start the email agent.  Called by `python -m src` and the CLI entry point."""
-    load_dotenv()
+    load_dotenv(override=True)
 
     logging.basicConfig(
         level=logging.INFO,
@@ -249,10 +265,19 @@ async def _amain() -> None:
     except (NotImplementedError, AttributeError, ValueError):
         pass
 
+    # Start the scheduler AFTER the watcher establishes its first MCP connection.
+    # On Windows (ProactorEventLoop), AsyncIOScheduler's background tasks interfere
+    # with subprocess spawning if started beforehand, causing "Connection closed"
+    # during the MCP handshake.
     scheduler = create_briefing_scheduler(engine, output_config)
-    scheduler.start()
+
+    async def on_first_connect() -> None:
+        scheduler.start()
+
+    watcher.on_first_connect = on_first_connect  # type: ignore[attr-defined]
 
     try:
         await watcher.run()
     finally:
-        scheduler.shutdown(wait=False)
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
