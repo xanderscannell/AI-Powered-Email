@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 
 _BRIEFING_MODEL = "claude-sonnet-4-6"
 _BRIEFING_MAX_TOKENS = 1500
-_PRIORITY_LABEL: dict[int, str] = {1: "CRITICAL", 2: "HIGH", 3: "MEDIUM", 4: "LOW", 5: "FYI"}
 
 
 @dataclass(frozen=True)
@@ -63,10 +62,10 @@ class BriefingGenerator:
     async def generate(self) -> str:
         """Collect data, synthesise via Sonnet, route to enabled outputs. Returns text."""
         today = date.today().isoformat()
-        urgent = self._engine.get_urgent_emails(24)
+        human_needing_reply = self._engine.get_human_emails_needing_reply(24)
         follow_ups = self._engine.get_pending_follow_ups()
         deadlines = self._engine.get_open_deadlines()
-        prompt = self._build_prompt(today, urgent, follow_ups, deadlines)
+        prompt = self._build_prompt(today, human_needing_reply, follow_ups, deadlines)
 
         try:
             response = await self._client.messages.create(
@@ -77,7 +76,7 @@ class BriefingGenerator:
             text: str = response.content[0].text if response.content else "(no response)"
         except Exception as exc:  # noqa: BLE001
             logger.error("Sonnet briefing synthesis failed: %s", exc)
-            text = self._fallback_text(today, urgent, follow_ups, deadlines)
+            text = self._fallback_text(today, human_needing_reply, follow_ups, deadlines)
 
         await self._route_output(text, today)
         return text
@@ -85,14 +84,13 @@ class BriefingGenerator:
     def _build_prompt(
         self,
         today: str,
-        urgent: list[EmailRow],
+        human_needing_reply: list[EmailRow],
         follow_ups: list[tuple[FollowUpRecord, EmailRow | None]],
         deadlines: list[tuple[DeadlineRecord, EmailRow | None]],
     ) -> str:
-        urgent_lines = "\n".join(
-            f"  - [{_PRIORITY_LABEL.get(r.priority, str(r.priority))}] "
-            f"{r.subject} (from {r.sender}): {r.summary}"
-            for r in urgent
+        reply_lines = "\n".join(
+            f"  - {r.subject} (from {r.sender}): {r.summary}"
+            for r in human_needing_reply
         ) or "  None"
         follow_up_lines = "\n".join(
             f"  - {row.subject if row else '(unknown)'} "
@@ -105,7 +103,7 @@ class BriefingGenerator:
         ) or "  None"
         return (
             f"Today is {today}. Generate a concise morning email briefing.\n\n"
-            f"URGENT EMAILS (last 24h, priority CRITICAL or HIGH):\n{urgent_lines}\n\n"
+            f"HUMAN EMAILS NEEDING REPLY (last 24h):\n{reply_lines}\n\n"
             f"PENDING FOLLOW-UPS:\n{follow_up_lines}\n\n"
             f"OPEN DEADLINES:\n{deadline_lines}\n\n"
             "Format the briefing with clear labelled sections. Be specific — reference "
@@ -116,16 +114,16 @@ class BriefingGenerator:
     def _fallback_text(
         self,
         today: str,
-        urgent: list[EmailRow],
+        human_needing_reply: list[EmailRow],
         follow_ups: list[tuple[FollowUpRecord, EmailRow | None]],
         deadlines: list[tuple[DeadlineRecord, EmailRow | None]],
     ) -> str:
         lines: list[str] = [
             f"# Morning Briefing \u2014 {today}\n",
             "*(Sonnet unavailable \u2014 raw data)*\n",
-            f"\n## Urgent ({len(urgent)})",
+            f"\n## Human emails needing reply ({len(human_needing_reply)})",
         ]
-        for r in urgent:
+        for r in human_needing_reply:
             lines.append(f"- {r.subject} \u2014 {r.sender}")
         lines.append(f"\n## Pending follow-ups ({len(follow_ups)})")
         for fu, row in follow_ups:

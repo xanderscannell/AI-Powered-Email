@@ -14,7 +14,7 @@ from src.storage.models import DeadlineRecord, EmailRow, FollowUpRecord
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 
-def _make_row(email_id: str = "msg_1", priority: int = 1) -> EmailRow:
+def _make_row(email_id: str = "msg_1") -> EmailRow:
     return EmailRow(
         id=email_id,
         thread_id="thread_1",
@@ -23,9 +23,8 @@ def _make_row(email_id: str = "msg_1", priority: int = 1) -> EmailRow:
         snippet="snippet",
         body="Please review immediately.",
         date="2026-02-27",
-        sentiment=-0.5,
-        intent="action_required",
-        priority=priority,
+        email_type="human",
+        domain=None,
         summary="Budget review requested urgently.",
         requires_reply=True,
         deadline=None,
@@ -55,12 +54,12 @@ def _make_deadline(email_id: str = "msg_1") -> DeadlineRecord:
 
 
 def _make_engine(
-    urgent=None,
+    human_needing_reply=None,
     follow_ups=None,
     deadlines=None,
 ) -> MagicMock:
     engine = MagicMock()
-    engine.get_urgent_emails.return_value = urgent or []
+    engine.get_human_emails_needing_reply.return_value = human_needing_reply or []
     engine.get_pending_follow_ups.return_value = follow_ups or []
     engine.get_open_deadlines.return_value = deadlines or []
     return engine
@@ -92,11 +91,11 @@ class TestBuildPrompt:
             api_key="test-key",
         )
 
-    def test_prompt_contains_urgent_subject(self) -> None:
+    def test_prompt_contains_human_subject(self) -> None:
         gen = self._gen()
         prompt = gen._build_prompt(
             "2026-02-27",
-            urgent=[_make_row()],
+            human_needing_reply=[_make_row()],
             follow_ups=[],
             deadlines=[],
         )
@@ -106,7 +105,7 @@ class TestBuildPrompt:
         gen = self._gen()
         prompt = gen._build_prompt(
             "2026-02-27",
-            urgent=[],
+            human_needing_reply=[],
             follow_ups=[(_make_follow_up(), _make_row())],
             deadlines=[],
         )
@@ -116,7 +115,7 @@ class TestBuildPrompt:
         gen = self._gen()
         prompt = gen._build_prompt(
             "2026-02-27",
-            urgent=[],
+            human_needing_reply=[],
             follow_ups=[],
             deadlines=[(_make_deadline(), _make_row())],
         )
@@ -124,12 +123,12 @@ class TestBuildPrompt:
 
     def test_prompt_includes_today_date(self) -> None:
         gen = self._gen()
-        prompt = gen._build_prompt("2026-02-27", urgent=[], follow_ups=[], deadlines=[])
+        prompt = gen._build_prompt("2026-02-27", human_needing_reply=[], follow_ups=[], deadlines=[])
         assert "2026-02-27" in prompt
 
     def test_prompt_requests_recommended_focus(self) -> None:
         gen = self._gen()
-        prompt = gen._build_prompt("2026-02-27", urgent=[], follow_ups=[], deadlines=[])
+        prompt = gen._build_prompt("2026-02-27", human_needing_reply=[], follow_ups=[], deadlines=[])
         assert "Recommended focus" in prompt
 
 
@@ -148,13 +147,13 @@ class TestGenerate:
         assert "Briefing" in result
 
     @pytest.mark.asyncio
-    async def test_calls_get_urgent_emails(self, terminal_only_config: OutputConfig) -> None:
+    async def test_calls_get_human_emails_needing_reply(self, terminal_only_config: OutputConfig) -> None:
         engine = _make_engine()
         gen = BriefingGenerator(engine=engine, output_config=terminal_only_config, api_key="test-key")
         gen._client.messages.create = AsyncMock(return_value=_make_sonnet_response())
         with patch("rich.console.Console"):
             await gen.generate()
-        engine.get_urgent_emails.assert_called_once_with(24)
+        engine.get_human_emails_needing_reply.assert_called_once_with(24)
 
     @pytest.mark.asyncio
     async def test_calls_get_pending_follow_ups(self, terminal_only_config: OutputConfig) -> None:
@@ -182,7 +181,7 @@ class TestSonnetFallback:
     @pytest.mark.asyncio
     async def test_returns_fallback_text_on_api_error(self) -> None:
         engine = _make_engine(
-            urgent=[_make_row()],
+            human_needing_reply=[_make_row()],
             follow_ups=[(_make_follow_up(), _make_row())],
             deadlines=[(_make_deadline(), _make_row())],
         )
