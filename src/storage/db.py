@@ -92,7 +92,7 @@ class EmailDatabase:
     def get_contact_history(self, email_address: str) -> ContactRecord | None:
         """Return the contact record for an email address, or None if not found."""
         row = self._conn.execute(
-            "SELECT email_address, total_emails, avg_sentiment, last_contact "
+            "SELECT email_address, total_emails, last_contact "
             "FROM contacts WHERE email_address = ?",
             (email_address,),
         ).fetchone()
@@ -102,7 +102,7 @@ class EmailDatabase:
         """Return the stored email row for email_id, or None if not found."""
         row = self._conn.execute(
             """SELECT id, thread_id, sender, subject, snippet, body, date,
-                      sentiment, intent, priority, summary, requires_reply,
+                      email_type, domain, summary, requires_reply,
                       deadline, entities, processed_at
                FROM emails WHERE id = ?""",
             (email_id,),
@@ -113,16 +113,17 @@ class EmailDatabase:
         d["requires_reply"] = bool(d["requires_reply"])
         return EmailRow(**d)
 
-    def get_urgent_emails(self, hours: int = 24) -> list[EmailRow]:
-        """Return CRITICAL and HIGH priority emails processed within the last N hours."""
+    def get_human_emails_needing_reply(self, hours: int = 24) -> list[EmailRow]:
+        """Return human emails that require a reply, processed within the last N hours."""
         rows = self._conn.execute(
             """SELECT id, thread_id, sender, subject, snippet, body, date,
-                      sentiment, intent, priority, summary, requires_reply,
+                      email_type, domain, summary, requires_reply,
                       deadline, entities, processed_at
                FROM emails
-               WHERE priority <= 2
+               WHERE email_type = 'human'
+                 AND requires_reply = 1
                  AND processed_at >= datetime('now', ?)
-               ORDER BY priority ASC, processed_at DESC""",
+               ORDER BY processed_at DESC""",
             (f"-{hours} hours",),
         ).fetchall()
         result = []
@@ -155,13 +156,12 @@ class EmailDatabase:
             """
             INSERT INTO emails
                 (id, thread_id, sender, subject, snippet, body, date,
-                 sentiment, intent, priority, summary,
+                 email_type, domain, summary,
                  requires_reply, deadline, entities)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
-                sentiment      = excluded.sentiment,
-                intent         = excluded.intent,
-                priority       = excluded.priority,
+                email_type     = excluded.email_type,
+                domain         = excluded.domain,
                 summary        = excluded.summary,
                 requires_reply = excluded.requires_reply,
                 deadline       = excluded.deadline,
@@ -175,9 +175,8 @@ class EmailDatabase:
                 email.snippet,
                 email.body,
                 email.date,
-                analysis.sentiment,
-                analysis.intent.value,
-                int(analysis.priority),
+                analysis.email_type.value,
+                analysis.domain.value if analysis.domain else None,
                 analysis.summary,
                 int(analysis.requires_reply),
                 analysis.deadline,
@@ -187,26 +186,22 @@ class EmailDatabase:
 
     def _upsert_contact(self, email: RawEmail, analysis: EmailAnalysis) -> None:
         existing = self._conn.execute(
-            "SELECT total_emails, avg_sentiment FROM contacts WHERE email_address = ?",
+            "SELECT total_emails FROM contacts WHERE email_address = ?",
             (email.sender,),
         ).fetchone()
 
         if existing:
-            old_count = existing["total_emails"]
-            old_avg = existing["avg_sentiment"]
-            new_count = old_count + 1
-            new_avg = (old_avg * old_count + analysis.sentiment) / new_count
             self._conn.execute(
                 """UPDATE contacts
-                   SET total_emails = ?, avg_sentiment = ?, last_contact = ?
+                   SET total_emails = ?, last_contact = ?
                    WHERE email_address = ?""",
-                (new_count, new_avg, email.date, email.sender),
+                (existing["total_emails"] + 1, email.date, email.sender),
             )
         else:
             self._conn.execute(
-                """INSERT INTO contacts (email_address, total_emails, avg_sentiment, last_contact)
-                   VALUES (?, 1, ?, ?)""",
-                (email.sender, analysis.sentiment, email.date),
+                """INSERT INTO contacts (email_address, total_emails, last_contact)
+                   VALUES (?, 1, ?)""",
+                (email.sender, email.date),
             )
 
     def _insert_follow_up(self, email_id: str) -> None:
