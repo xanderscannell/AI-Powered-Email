@@ -23,21 +23,6 @@ from src.processing.analyzer import AnalysisProcessor, EmailAnalyzer
 logger = logging.getLogger(__name__)
 console = Console(width=200)
 
-_PRIORITY_LABEL: dict[int, str] = {
-    1: "CRITICAL",
-    2: "HIGH",
-    3: "MEDIUM",
-    4: "LOW",
-    5: "FYI",
-}
-_PRIORITY_STYLE: dict[int, str] = {
-    1: "red bold",
-    2: "orange3",
-    3: "yellow",
-    4: "white",
-    5: "dim",
-}
-
 
 @click.command()
 @click.argument("query")
@@ -59,21 +44,23 @@ def search(engine: QueryEngine, query: str, limit: int) -> None:
     table.add_column("Subject", max_width=38)
     table.add_column("From", max_width=26)
     table.add_column("Date", width=12)
-    table.add_column("Priority", width=10)
+    table.add_column("Type", width=10)
+    table.add_column("Domain", width=12)
     table.add_column("Score", width=6)
 
     for i, result in enumerate(results, start=1):
         m = result.metadata
-        pri = int(m.get("priority", 3))
-        pri_label = _PRIORITY_LABEL.get(pri, str(pri))
-        pri_style = _PRIORITY_STYLE.get(pri, "white")
+        email_type = str(m.get("email_type", ""))
+        domain = str(m.get("domain", ""))
+        type_style = "cyan" if email_type == "human" else "dim"
         score = f"{max(0.0, 1.0 - result.distance):.2f}"
         table.add_row(
             str(i),
             str(m.get("subject", "")),
             str(m.get("sender", "")),
             str(m.get("date", ""))[:10],
-            f"[{pri_style}]{pri_label}[/{pri_style}]",
+            f"[{type_style}]{email_type}[/{type_style}]",
+            domain or "",
             score,
         )
 
