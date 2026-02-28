@@ -24,17 +24,30 @@ logger = logging.getLogger(__name__)
 _STARRED = "STARRED"
 _UNREAD = "UNREAD"
 
-# Full set of AI labels the agent creates on first run
+# Full set of AI labels the agent creates on first run.
+# Order matters: parents must be created before their children so Gmail
+# nests them correctly in the sidebar.
 AI_LABELS: list[str] = [
-    "AI/Priority/Critical",
-    "AI/Priority/High",
-    "AI/Priority/Medium",
-    "AI/Priority/Low",
-    "AI/Priority/FYI",
-    "AI/Intent/ActionRequired",
-    "AI/Intent/Question",
-    "AI/Intent/FYI",
-    "AI/FollowUp",
+    # Level 0 — root parent; never applied to emails directly
+    "AI",
+    # Level 1 — type parents (inbox filter targets)
+    "AI/Human",
+    "AI/Automated",
+    # Level 2 — Human sublabels
+    "AI/Human/FollowUp",
+    # Level 2 — Automated domain sublabels
+    "AI/Automated/Finance",
+    "AI/Automated/Shopping",
+    "AI/Automated/Travel",
+    "AI/Automated/Health",
+    "AI/Automated/Government",
+    "AI/Automated/Work",
+    "AI/Automated/Education",
+    "AI/Automated/Newsletter",
+    "AI/Automated/Marketing",
+    "AI/Automated/Social",
+    "AI/Automated/Alerts",
+    "AI/Automated/Other",
 ]
 
 # JSON-decoded value from an MCP tool response

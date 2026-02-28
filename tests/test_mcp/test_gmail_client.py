@@ -47,10 +47,9 @@ def client(session: MagicMock) -> GmailClient:
     """GmailClient with a pre-populated label cache (no live MCP calls needed)."""
     c = GmailClient(session, "test@example.com")
     c._label_cache = {
-        "AI/Priority/High": "lbl_priority_high",
-        "AI/Priority/Critical": "lbl_priority_critical",
-        "AI/Intent/ActionRequired": "lbl_intent_action",
-        "AI/FollowUp": "lbl_followup",
+        "AI/Human": "lbl_human",
+        "AI/Human/FollowUp": "lbl_followup",
+        "AI/Automated/Finance": "lbl_finance",
         "ExistingLabel": "lbl_existing",
     }
     return c
@@ -209,11 +208,11 @@ class TestGetEmail:
 class TestApplyLabel:
     async def test_applies_cached_label(self, client: GmailClient, session: MagicMock) -> None:
         session.call_tool.return_value = _tool_result("OK")
-        await client.apply_label("msg_1", "AI/Priority/High")
+        await client.apply_label("msg_1", "AI/Human")
 
         session.call_tool.assert_called_once_with(
             "modify_gmail_message_labels",
-            {"message_id": "msg_1", "add_label_ids": ["lbl_priority_high"],
+            {"message_id": "msg_1", "add_label_ids": ["lbl_human"],
              "user_google_email": "test@example.com"},
         )
 
@@ -221,15 +220,15 @@ class TestApplyLabel:
         self, client: GmailClient, session: MagicMock
     ) -> None:
         # Label not in cache → refresh (returns it) → apply
-        client._label_cache.pop("AI/Priority/High")
+        client._label_cache.pop("AI/Human")
         refreshed_labels = [
-            {"id": "lbl_priority_high", "name": "AI/Priority/High"},
+            {"id": "lbl_human", "name": "AI/Human"},
         ]
         session.call_tool.side_effect = [
             _tool_result(refreshed_labels),   # _refresh_label_cache
             _tool_result("OK"),                # modify_gmail_message_labels
         ]
-        await client.apply_label("msg_1", "AI/Priority/High")
+        await client.apply_label("msg_1", "AI/Human")
         assert session.call_tool.call_count == 2
 
 
