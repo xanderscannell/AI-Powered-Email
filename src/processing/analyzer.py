@@ -13,11 +13,12 @@ from src.mcp.gmail_client import GmailClient
 from src.mcp.types import RawEmail
 from src.processing.prompts import ANALYSIS_TOOL, build_messages
 from src.processing.types import (
+    DOMAIN_LABEL,
+    HUMAN_FOLLOWUP_LABEL,
+    HUMAN_LABEL,
+    Domain,
     EmailAnalysis,
-    Intent,
-    INTENT_LABEL,
-    Priority,
-    PRIORITY_LABEL,
+    EmailType,
 )
 
 if TYPE_CHECKING:
@@ -83,11 +84,13 @@ class EmailAnalyzer:
 
 def _parse_analysis(email_id: str, data: dict[str, object]) -> EmailAnalysis:
     """Convert the raw tool-call input dict into a typed EmailAnalysis."""
+    email_type = EmailType(str(data["email_type"]))
+    raw_domain = data.get("domain")
+    domain = Domain(str(raw_domain)) if raw_domain else None
     return EmailAnalysis(
         email_id=email_id,
-        sentiment=float(data["sentiment"]),  # type: ignore[arg-type]
-        intent=Intent(data["intent"]),
-        priority=Priority(int(data["priority"])),  # type: ignore[arg-type]
+        email_type=email_type,
+        domain=domain,
         entities=[str(e) for e in data.get("entities", [])],  # type: ignore[union-attr]
         summary=str(data.get("summary", "")),
         requires_reply=bool(data.get("requires_reply", False)),
@@ -134,25 +137,29 @@ class AnalysisProcessor:
         await self._write_storage(email, analysis)
 
         logger.info(
-            "email=%s priority=%s intent=%s sentiment=%+.2f reply=%s deadline=%r",
+            "email=%s type=%s domain=%s reply=%s deadline=%r",
             email.id,
-            analysis.priority.name,
-            analysis.intent.value,
-            analysis.sentiment,
+            analysis.email_type.value,
+            analysis.domain.value if analysis.domain else "n/a",
             analysis.requires_reply,
             analysis.deadline,
         )
 
     async def _apply_labels(self, email_id: str, analysis: EmailAnalysis) -> None:
         """Fan out label writes; log individual failures rather than raising."""
-        ops: list[tuple[str, object]] = [
-            ("priority label", self._gmail.apply_label(email_id, PRIORITY_LABEL[analysis.priority])),
-            ("intent label", self._gmail.apply_label(email_id, INTENT_LABEL[analysis.intent])),
-        ]
-        if analysis.priority in (Priority.CRITICAL, Priority.HIGH):
-            ops.append(("star", self._gmail.star_email(email_id)))
-        if analysis.requires_reply:
-            ops.append(("follow-up label", self._gmail.apply_label(email_id, "AI/FollowUp")))
+        if analysis.email_type == EmailType.HUMAN:
+            ops: list[tuple[str, object]] = [
+                ("human label", self._gmail.apply_label(email_id, HUMAN_LABEL)),
+            ]
+            if analysis.requires_reply:
+                ops.append(("follow-up label", self._gmail.apply_label(email_id, HUMAN_FOLLOWUP_LABEL)))
+        else:
+            domain_label = DOMAIN_LABEL.get(analysis.domain or Domain.OTHER, DOMAIN_LABEL[Domain.OTHER])
+            ops = [
+                ("domain label", self._gmail.apply_label(email_id, domain_label)),
+            ]
+            if analysis.requires_reply:
+                ops.append(("follow-up label", self._gmail.apply_label(email_id, HUMAN_FOLLOWUP_LABEL)))
 
         for name, coro in ops:
             try:

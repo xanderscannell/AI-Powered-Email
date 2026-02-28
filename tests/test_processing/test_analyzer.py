@@ -13,7 +13,7 @@ from src.processing.analyzer import (
     _parse_analysis,
 )
 from src.processing.prompts import BODY_CHAR_LIMIT, build_messages
-from src.processing.types import EmailAnalysis, Intent, Priority
+from src.processing.types import Domain, EmailAnalysis, EmailType
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -41,9 +41,8 @@ def make_tool_block(data: dict[str, object]) -> ToolUseBlock:
 
 
 VALID_DATA: dict[str, object] = {
-    "sentiment": 0.5,
-    "intent": "question",
-    "priority": 3,
+    "email_type": "automated",
+    "domain": "finance",
     "entities": ["Alice", "Project X"],
     "summary": "Alice asks about Project X.",
     "requires_reply": True,
@@ -110,9 +109,8 @@ class TestParseAnalysis:
     def test_parses_all_fields(self) -> None:
         a = _parse_analysis("msg_1", VALID_DATA)
         assert a.email_id == "msg_1"
-        assert a.sentiment == 0.5
-        assert a.intent == Intent.QUESTION
-        assert a.priority == Priority.MEDIUM
+        assert a.email_type == EmailType.AUTOMATED
+        assert a.domain == Domain.FINANCE
         assert a.entities == ["Alice", "Project X"]
         assert a.summary == "Alice asks about Project X."
         assert a.requires_reply is True
@@ -160,7 +158,7 @@ class TestEmailAnalyzerAnalyze:
         result = await analyzer.analyze(make_email())
 
         assert isinstance(result, EmailAnalysis)
-        assert result.sentiment == 0.5
+        assert result.email_type == EmailType.AUTOMATED
 
     async def test_passes_email_id_through(self, analyzer: EmailAnalyzer) -> None:
         block = make_tool_block(VALID_DATA)
@@ -224,9 +222,8 @@ class TestAnalysisProcessorProcess:
     def _analysis(self, **kwargs: object) -> EmailAnalysis:
         defaults: dict[str, object] = dict(
             email_id="msg_1",
-            sentiment=0.0,
-            intent=Intent.FYI,
-            priority=Priority.MEDIUM,
+            email_type=EmailType.HUMAN,
+            domain=None,
         )
         return EmailAnalysis(**{**defaults, **kwargs})  # type: ignore[arg-type]
 
@@ -239,55 +236,33 @@ class TestAnalysisProcessorProcess:
 
         analyzer.analyze.assert_called_once_with(email)
 
-    async def test_applies_priority_label(self) -> None:
+    async def test_applies_human_label_for_human_email(self) -> None:
         proc, analyzer, gmail = self._make_processor()
-        analyzer.analyze = AsyncMock(return_value=self._analysis(priority=Priority.HIGH))
-
+        analyzer.analyze = AsyncMock(
+            return_value=self._analysis(email_type=EmailType.HUMAN)
+        )
         await proc.process(make_email())
-
         labels_applied = [c.args[1] for c in gmail.apply_label.call_args_list]
-        assert "AI/Priority/High" in labels_applied
+        assert "AI/Human" in labels_applied
 
-    async def test_applies_intent_label(self) -> None:
+    async def test_applies_domain_label_for_automated_email(self) -> None:
         proc, analyzer, gmail = self._make_processor()
         analyzer.analyze = AsyncMock(
-            return_value=self._analysis(intent=Intent.ACTION_REQUIRED)
+            return_value=self._analysis(email_type=EmailType.AUTOMATED, domain=Domain.FINANCE)
         )
-
         await proc.process(make_email())
-
         labels_applied = [c.args[1] for c in gmail.apply_label.call_args_list]
-        assert "AI/Intent/ActionRequired" in labels_applied
+        assert "AI/Automated/Finance" in labels_applied
+        assert "AI/Human" not in labels_applied
 
-    async def test_stars_critical_emails(self) -> None:
+    async def test_does_not_apply_domain_label_for_human_email(self) -> None:
         proc, analyzer, gmail = self._make_processor()
         analyzer.analyze = AsyncMock(
-            return_value=self._analysis(priority=Priority.CRITICAL)
+            return_value=self._analysis(email_type=EmailType.HUMAN, domain=None)
         )
-
         await proc.process(make_email())
-
-        gmail.star_email.assert_called_once()
-
-    async def test_stars_high_priority_emails(self) -> None:
-        proc, analyzer, gmail = self._make_processor()
-        analyzer.analyze = AsyncMock(
-            return_value=self._analysis(priority=Priority.HIGH)
-        )
-
-        await proc.process(make_email())
-
-        gmail.star_email.assert_called_once()
-
-    async def test_does_not_star_medium_priority(self) -> None:
-        proc, analyzer, gmail = self._make_processor()
-        analyzer.analyze = AsyncMock(
-            return_value=self._analysis(priority=Priority.MEDIUM)
-        )
-
-        await proc.process(make_email())
-
-        gmail.star_email.assert_not_called()
+        labels_applied = [c.args[1] for c in gmail.apply_label.call_args_list]
+        assert not any("AI/Automated" in l for l in labels_applied)
 
     async def test_applies_followup_label_when_reply_required(self) -> None:
         proc, analyzer, gmail = self._make_processor()
@@ -298,7 +273,7 @@ class TestAnalysisProcessorProcess:
         await proc.process(make_email())
 
         labels_applied = [c.args[1] for c in gmail.apply_label.call_args_list]
-        assert "AI/FollowUp" in labels_applied
+        assert "AI/Human/FollowUp" in labels_applied
 
     async def test_no_followup_label_when_reply_not_required(self) -> None:
         proc, analyzer, gmail = self._make_processor()
@@ -309,7 +284,7 @@ class TestAnalysisProcessorProcess:
         await proc.process(make_email())
 
         labels_applied = [c.args[1] for c in gmail.apply_label.call_args_list]
-        assert "AI/FollowUp" not in labels_applied
+        assert "AI/Human/FollowUp" not in labels_applied
 
     async def test_swallows_analysis_error(self) -> None:
         """A failed analysis must not propagate — processor contract requires silence."""
@@ -352,9 +327,8 @@ class TestWriteStorage:
     def _analysis(self) -> EmailAnalysis:
         return EmailAnalysis(
             email_id="msg_1",
-            sentiment=0.0,
-            intent=Intent.FYI,
-            priority=Priority.MEDIUM,
+            email_type=EmailType.HUMAN,
+            domain=None,
         )
 
     async def test_upserts_to_vector_store(self) -> None:
@@ -399,9 +373,6 @@ class TestWriteStorage:
         gmail.apply_label = AsyncMock()
         proc = AnalysisProcessor(analyzer=analyzer, gmail=gmail)
         analyzer.analyze = AsyncMock(
-            return_value=EmailAnalysis(
-                email_id="x", sentiment=0.0,
-                intent=Intent.FYI, priority=Priority.MEDIUM,
-            )
+            return_value=EmailAnalysis(email_id="x", email_type=EmailType.HUMAN, domain=None)
         )
         await proc.process(make_email())  # must not raise
