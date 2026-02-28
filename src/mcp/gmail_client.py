@@ -450,6 +450,10 @@ async def gmail_client(
             "USER_GOOGLE_EMAIL": email,
             "MCP_SINGLE_USER_MODE": "1",
             "WORKSPACE_MCP_PORT": mcp_port,
+            # Force UTF-8 I/O in the workspace-mcp subprocess so that Unicode
+            # characters in log messages (e.g. ✓) don't crash the logging handler
+            # on Windows, where the default console encoding is cp1252.
+            "PYTHONUTF8": "1",
         },
     )
 
