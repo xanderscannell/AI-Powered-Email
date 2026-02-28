@@ -13,7 +13,7 @@ from src.processing.analyzer import (
     _parse_analysis,
 )
 from src.processing.prompts import BODY_CHAR_LIMIT, build_messages
-from src.processing.types import Domain, EmailAnalysis, EmailType
+from src.processing.types import DOMAIN_LABEL, Domain, EmailAnalysis, EmailType
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -285,6 +285,23 @@ class TestAnalysisProcessorProcess:
 
         labels_applied = [c.args[1] for c in gmail.apply_label.call_args_list]
         assert "AI/Human/FollowUp" not in labels_applied
+
+    async def test_automated_email_never_gets_followup_label(self) -> None:
+        """HUMAN_FOLLOWUP_LABEL must never be applied to automated emails, even when requires_reply=True."""
+        proc, analyzer, gmail = self._make_processor()
+        analyzer.analyze = AsyncMock(
+            return_value=self._analysis(
+                email_type=EmailType.AUTOMATED,
+                domain=Domain.SHOPPING,
+                requires_reply=True,
+            )
+        )
+
+        await proc.process(make_email())
+
+        labels_applied = [c.args[1] for c in gmail.apply_label.call_args_list]
+        assert "AI/Human/FollowUp" not in labels_applied
+        assert DOMAIN_LABEL[Domain.SHOPPING] in labels_applied
 
     async def test_swallows_analysis_error(self) -> None:
         """A failed analysis must not propagate — processor contract requires silence."""

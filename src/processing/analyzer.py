@@ -158,8 +158,6 @@ class AnalysisProcessor:
             ops = [
                 ("domain label", self._gmail.apply_label(email_id, domain_label)),
             ]
-            if analysis.requires_reply:
-                ops.append(("follow-up label", self._gmail.apply_label(email_id, HUMAN_FOLLOWUP_LABEL)))
 
         for name, coro in ops:
             try:
