@@ -97,12 +97,13 @@ class EmailVectorStore:
         where: dict[str, Any],
         n_results: int = 10,
     ) -> list[SearchResult]:
-        """Semantic search filtered by metadata (e.g. sender, priority).
+        """Semantic search filtered by metadata.
 
         ``where`` uses ChromaDB's filter syntax, e.g.::
 
-            {"priority": {"$lte": 2}}         # priority 1 or 2
-            {"sender": "alice@example.com"}    # exact sender match
+            {"email_type": "human"}
+            {"domain": "finance"}
+            {"sender": "alice@example.com"}
         """
         count = self._collection.count()
         if count == 0:
@@ -137,9 +138,8 @@ def _build_metadata(email: RawEmail, analysis: EmailAnalysis) -> dict[str, Any]:
         "subject": email.subject,
         "thread_id": email.thread_id,
         "date": email.date or "",
-        "priority": int(analysis.priority),
-        "intent": analysis.intent.value,
-        "sentiment": analysis.sentiment,
+        "email_type": analysis.email_type.value,
+        "domain": analysis.domain.value if analysis.domain else "",
         "requires_reply": analysis.requires_reply,
         "summary": analysis.summary,
     }

@@ -9,7 +9,7 @@ from chromadb import EmbeddingFunction
 from chromadb.api.types import Documents
 
 from src.mcp.types import RawEmail
-from src.processing.types import EmailAnalysis, Intent, Priority
+from src.processing.types import Domain, EmailAnalysis, EmailType
 from src.storage.vector_store import EmailVectorStore, SearchResult, _build_document, _build_metadata
 
 
@@ -62,17 +62,15 @@ def make_email(
 
 def make_analysis(
     email_id: str = "msg_1",
-    sentiment: float = 0.5,
-    intent: Intent = Intent.ACTION_REQUIRED,
-    priority: Priority = Priority.HIGH,
+    email_type: EmailType = EmailType.HUMAN,
+    domain: Domain | None = None,
     requires_reply: bool = True,
     summary: str = "Budget review needed.",
 ) -> EmailAnalysis:
     return EmailAnalysis(
         email_id=email_id,
-        sentiment=sentiment,
-        intent=intent,
-        priority=priority,
+        email_type=email_type,
+        domain=domain,
         entities=["Q2 Budget"],
         summary=summary,
         requires_reply=requires_reply,
@@ -122,18 +120,22 @@ class TestBuildDocument:
 class TestBuildMetadata:
     def test_contains_expected_keys(self) -> None:
         meta = _build_metadata(make_email(), make_analysis())
-        expected_keys = {"sender", "subject", "thread_id", "date", "priority",
-                         "intent", "sentiment", "requires_reply", "summary"}
+        expected_keys = {"sender", "subject", "thread_id", "date", "email_type",
+                         "domain", "requires_reply", "summary"}
         assert expected_keys <= set(meta.keys())
 
-    def test_priority_is_int(self) -> None:
-        meta = _build_metadata(make_email(), make_analysis(priority=Priority.CRITICAL))
-        assert meta["priority"] == 1
-        assert isinstance(meta["priority"], int)
+    def test_email_type_is_string(self) -> None:
+        meta = _build_metadata(make_email(), make_analysis(email_type=EmailType.HUMAN))
+        assert meta["email_type"] == "human"
+        assert isinstance(meta["email_type"], str)
 
-    def test_intent_is_string(self) -> None:
-        meta = _build_metadata(make_email(), make_analysis(intent=Intent.FYI))
-        assert meta["intent"] == "fyi"
+    def test_domain_is_string(self) -> None:
+        meta = _build_metadata(make_email(), make_analysis(email_type=EmailType.AUTOMATED, domain=Domain.FINANCE))
+        assert meta["domain"] == "finance"
+
+    def test_domain_empty_string_when_none(self) -> None:
+        meta = _build_metadata(make_email(), make_analysis(email_type=EmailType.HUMAN, domain=None))
+        assert meta["domain"] == ""
 
 
 # ── upsert ─────────────────────────────────────────────────────────────────────
@@ -214,12 +216,12 @@ class TestSearchWithFilter:
         )
         assert results == []
 
-    def test_filter_by_priority(self, store: EmailVectorStore) -> None:
-        store.upsert(make_email("hi"), make_analysis("hi", priority=Priority.HIGH))
-        store.upsert(make_email("lo"), make_analysis("lo", priority=Priority.LOW))
+    def test_filter_by_email_type(self, store: EmailVectorStore) -> None:
+        store.upsert(make_email("hi"), make_analysis("hi", email_type=EmailType.HUMAN))
+        store.upsert(make_email("lo"), make_analysis("lo", email_type=EmailType.AUTOMATED, domain=Domain.NEWSLETTER))
 
         results = store.search_with_filter(
-            "budget", where={"priority": int(Priority.HIGH)}
+            "budget", where={"email_type": "human"}
         )
         assert len(results) == 1
         assert results[0].email_id == "hi"
