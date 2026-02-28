@@ -3,100 +3,91 @@
 import pytest
 
 from src.processing.types import (
+    DOMAIN_LABEL,
+    HUMAN_LABEL,
+    HUMAN_FOLLOWUP_LABEL,
+    Domain,
     EmailAnalysis,
-    INTENT_LABEL,
-    Intent,
-    PRIORITY_LABEL,
-    Priority,
+    EmailType,
 )
 
 
-# ── Priority ────────────────────────────────────────────────────────────────────
-
-
-class TestPriority:
-    def test_values_are_1_to_5(self) -> None:
-        assert [p.value for p in Priority] == [1, 2, 3, 4, 5]
-
-    def test_is_int_enum(self) -> None:
-        assert isinstance(Priority.CRITICAL, int)
-        assert Priority.CRITICAL == 1
-        assert Priority.FYI == 5
-
-    def test_names(self) -> None:
-        assert Priority(1) is Priority.CRITICAL
-        assert Priority(2) is Priority.HIGH
-        assert Priority(3) is Priority.MEDIUM
-        assert Priority(4) is Priority.LOW
-        assert Priority(5) is Priority.FYI
-
-
-# ── Intent ──────────────────────────────────────────────────────────────────────
-
-
-class TestIntent:
-    def test_string_values(self) -> None:
-        assert Intent.ACTION_REQUIRED == "action_required"
-        assert Intent.QUESTION == "question"
-        assert Intent.FYI == "fyi"
+class TestEmailType:
+    def test_values(self) -> None:
+        assert EmailType.HUMAN == "human"
+        assert EmailType.AUTOMATED == "automated"
 
     def test_is_str_enum(self) -> None:
-        assert isinstance(Intent.ACTION_REQUIRED, str)
+        assert isinstance(EmailType.HUMAN, str)
 
     def test_round_trip(self) -> None:
-        for intent in Intent:
-            assert Intent(intent.value) is intent
+        for t in EmailType:
+            assert EmailType(t.value) is t
 
 
-# ── PRIORITY_LABEL ──────────────────────────────────────────────────────────────
+class TestDomain:
+    def test_all_values_present(self) -> None:
+        expected = {
+            "finance", "shopping", "travel", "health", "government",
+            "work", "education", "newsletter", "marketing", "social",
+            "alerts", "other",
+        }
+        assert {d.value for d in Domain} == expected
+
+    def test_is_str_enum(self) -> None:
+        assert isinstance(Domain.FINANCE, str)
+
+    def test_round_trip(self) -> None:
+        for d in Domain:
+            assert Domain(d.value) is d
 
 
-class TestPriorityLabel:
-    def test_all_priorities_have_a_label(self) -> None:
-        for p in Priority:
-            assert p in PRIORITY_LABEL, f"Missing label for {p}"
+class TestDomainLabel:
+    def test_all_domains_have_a_label(self) -> None:
+        for d in Domain:
+            assert d in DOMAIN_LABEL, f"Missing label for {d}"
 
-    def test_label_names(self) -> None:
-        assert PRIORITY_LABEL[Priority.CRITICAL] == "AI/Priority/Critical"
-        assert PRIORITY_LABEL[Priority.HIGH] == "AI/Priority/High"
-        assert PRIORITY_LABEL[Priority.MEDIUM] == "AI/Priority/Medium"
-        assert PRIORITY_LABEL[Priority.LOW] == "AI/Priority/Low"
-        assert PRIORITY_LABEL[Priority.FYI] == "AI/Priority/FYI"
-
-
-# ── INTENT_LABEL ────────────────────────────────────────────────────────────────
-
-
-class TestIntentLabel:
-    def test_all_intents_have_a_label(self) -> None:
-        for i in Intent:
-            assert i in INTENT_LABEL, f"Missing label for {i}"
-
-    def test_label_names(self) -> None:
-        assert INTENT_LABEL[Intent.ACTION_REQUIRED] == "AI/Intent/ActionRequired"
-        assert INTENT_LABEL[Intent.QUESTION] == "AI/Intent/Question"
-        assert INTENT_LABEL[Intent.FYI] == "AI/Intent/FYI"
+    def test_label_format(self) -> None:
+        assert DOMAIN_LABEL[Domain.FINANCE] == "AI/Automated/Finance"
+        assert DOMAIN_LABEL[Domain.SHOPPING] == "AI/Automated/Shopping"
+        assert DOMAIN_LABEL[Domain.TRAVEL] == "AI/Automated/Travel"
+        assert DOMAIN_LABEL[Domain.HEALTH] == "AI/Automated/Health"
+        assert DOMAIN_LABEL[Domain.GOVERNMENT] == "AI/Automated/Government"
+        assert DOMAIN_LABEL[Domain.WORK] == "AI/Automated/Work"
+        assert DOMAIN_LABEL[Domain.EDUCATION] == "AI/Automated/Education"
+        assert DOMAIN_LABEL[Domain.NEWSLETTER] == "AI/Automated/Newsletter"
+        assert DOMAIN_LABEL[Domain.MARKETING] == "AI/Automated/Marketing"
+        assert DOMAIN_LABEL[Domain.SOCIAL] == "AI/Automated/Social"
+        assert DOMAIN_LABEL[Domain.ALERTS] == "AI/Automated/Alerts"
+        assert DOMAIN_LABEL[Domain.OTHER] == "AI/Automated/Other"
 
 
-# ── EmailAnalysis ───────────────────────────────────────────────────────────────
+class TestHumanLabels:
+    def test_human_label(self) -> None:
+        assert HUMAN_LABEL == "AI/Human"
+
+    def test_followup_label(self) -> None:
+        assert HUMAN_FOLLOWUP_LABEL == "AI/Human/FollowUp"
 
 
 class TestEmailAnalysis:
     def _make(self, **kwargs: object) -> EmailAnalysis:
         defaults: dict[str, object] = dict(
             email_id="msg_1",
-            sentiment=0.0,
-            intent=Intent.FYI,
-            priority=Priority.MEDIUM,
+            email_type=EmailType.HUMAN,
+            domain=None,
         )
         return EmailAnalysis(**{**defaults, **kwargs})  # type: ignore[arg-type]
 
     def test_required_fields_are_stored(self) -> None:
-        a = self._make(sentiment=0.7, intent=Intent.QUESTION, priority=Priority.HIGH)
+        a = self._make(email_type=EmailType.AUTOMATED, domain=Domain.FINANCE)
         assert a.email_id == "msg_1"
-        assert a.sentiment == 0.7
-        assert a.intent == Intent.QUESTION
-        assert a.priority == Priority.HIGH
+        assert a.email_type == EmailType.AUTOMATED
+        assert a.domain == Domain.FINANCE
+
+    def test_human_email_has_no_domain(self) -> None:
+        a = self._make(email_type=EmailType.HUMAN, domain=None)
+        assert a.domain is None
 
     def test_defaults(self) -> None:
         a = self._make()
@@ -113,7 +104,6 @@ class TestEmailAnalysis:
             deadline="by Friday",
         )
         assert a.entities == ["Alice", "Project X"]
-        assert a.summary == "One sentence."
         assert a.requires_reply is True
         assert a.deadline == "by Friday"
 
