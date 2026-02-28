@@ -53,9 +53,9 @@ class QueryEngine:
         """
         return self.db.get_stored_ids_since(days)
 
-    def get_urgent_emails(self, hours: int = 24) -> list[EmailRow]:
-        """Return CRITICAL/HIGH priority emails from the last N hours."""
-        return self.db.get_urgent_emails(hours)
+    def get_human_emails_needing_reply(self, hours: int = 24) -> list[EmailRow]:
+        """Return human emails that require a reply, processed within the last N hours."""
+        return self.db.get_human_emails_needing_reply(hours)
 
     def get_pending_follow_ups(self) -> list[tuple[FollowUpRecord, EmailRow | None]]:
         """Return pending follow-ups, each enriched with its source EmailRow."""

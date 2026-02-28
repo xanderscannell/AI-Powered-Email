@@ -34,9 +34,8 @@ def _make_result(email_id: str = "msg_1", distance: float = 0.1) -> SearchResult
             "subject": "Budget review",
             "thread_id": "thread_1",
             "date": "2026-02-27",
-            "priority": 2,
-            "intent": "action_required",
-            "sentiment": 0.2,
+            "email_type": "human",
+            "domain": "",
             "requires_reply": True,
             "summary": "Budget review requested.",
         },
@@ -52,9 +51,8 @@ def _make_row(email_id: str = "msg_1") -> EmailRow:
         snippet="snippet",
         body="Please review the budget.",
         date="2026-02-27",
-        sentiment=0.2,
-        intent="action_required",
-        priority=2,
+        email_type="human",
+        domain=None,
         summary="Budget review requested.",
         requires_reply=True,
         deadline=None,
@@ -162,24 +160,24 @@ class TestClose:
         mock_db.close.assert_called_once()
 
 
-# ── get_urgent_emails ────────────────────────────────────────────────────────────
+# ── get_human_emails_needing_reply ───────────────────────────────────────────────
 
 
-class TestGetUrgentEmails:
+class TestGetHumanEmailsNeedingReply:
     def test_delegates_to_db(
         self, engine: QueryEngine, mock_db: MagicMock
     ) -> None:
-        mock_db.get_urgent_emails.return_value = [_make_row()]
-        result = engine.get_urgent_emails(hours=12)
-        mock_db.get_urgent_emails.assert_called_once_with(12)
+        mock_db.get_human_emails_needing_reply.return_value = [_make_row()]
+        result = engine.get_human_emails_needing_reply(hours=12)
+        mock_db.get_human_emails_needing_reply.assert_called_once_with(12)
         assert len(result) == 1
 
     def test_default_hours_is_24(
         self, engine: QueryEngine, mock_db: MagicMock
     ) -> None:
-        mock_db.get_urgent_emails.return_value = []
-        engine.get_urgent_emails()
-        mock_db.get_urgent_emails.assert_called_once_with(24)
+        mock_db.get_human_emails_needing_reply.return_value = []
+        engine.get_human_emails_needing_reply()
+        mock_db.get_human_emails_needing_reply.assert_called_once_with(24)
 
 
 # ── get_pending_follow_ups ───────────────────────────────────────────────────────
