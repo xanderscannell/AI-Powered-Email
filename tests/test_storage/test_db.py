@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from src.mcp.types import RawEmail
-from src.processing.types import EmailAnalysis, Intent, Priority
+from src.processing.types import Domain, EmailAnalysis, EmailType
 from src.storage.db import EmailDatabase
 from src.storage.models import ContactRecord, DeadlineRecord, EmailRow, FollowUpRecord
 
@@ -31,17 +31,15 @@ def make_email(
 
 def make_analysis(
     email_id: str = "msg_1",
-    sentiment: float = 0.0,
-    intent: Intent = Intent.FYI,
-    priority: Priority = Priority.MEDIUM,
+    email_type: EmailType = EmailType.HUMAN,
+    domain: Domain | None = None,
     requires_reply: bool = False,
     deadline: str | None = None,
 ) -> EmailAnalysis:
     return EmailAnalysis(
         email_id=email_id,
-        sentiment=sentiment,
-        intent=intent,
-        priority=priority,
+        email_type=email_type,
+        domain=domain,
         entities=["Alice"],
         summary="A test email.",
         requires_reply=requires_reply,
@@ -69,28 +67,27 @@ class TestEmailUpsert:
 
     def test_save_stores_analysis_fields(self, db: EmailDatabase) -> None:
         analysis = make_analysis(
-            sentiment=0.75,
-            intent=Intent.ACTION_REQUIRED,
-            priority=Priority.HIGH,
-            requires_reply=True,
+            email_type=EmailType.AUTOMATED,
+            domain=Domain.FINANCE,
+            requires_reply=False,
             deadline="by Friday",
         )
         db.save(make_email(), analysis)
 
         row = db._conn.execute("SELECT * FROM emails WHERE id = 'msg_1'").fetchone()
-        assert row["sentiment"] == pytest.approx(0.75)
-        assert row["intent"] == "action_required"
-        assert row["priority"] == 2
-        assert row["requires_reply"] == 1
+        assert row["email_type"] == "automated"
+        assert row["domain"] == "finance"
+        assert row["requires_reply"] == 0
         assert row["deadline"] == "by Friday"
 
     def test_upsert_updates_existing_row(self, db: EmailDatabase) -> None:
-        db.save(make_email(), make_analysis(sentiment=0.1))
-        db.save(make_email(), make_analysis(sentiment=0.9))
+        db.save(make_email(), make_analysis(email_type=EmailType.HUMAN))
+        db.save(make_email(), make_analysis(email_type=EmailType.AUTOMATED, domain=Domain.NEWSLETTER))
 
-        rows = db._conn.execute("SELECT sentiment FROM emails").fetchall()
+        rows = db._conn.execute("SELECT email_type, domain FROM emails").fetchall()
         assert len(rows) == 1
-        assert rows[0]["sentiment"] == pytest.approx(0.9)
+        assert rows[0]["email_type"] == "automated"
+        assert rows[0]["domain"] == "newsletter"
 
     def test_multiple_emails_stored_independently(self, db: EmailDatabase) -> None:
         db.save(make_email("a"), make_analysis("a"))
@@ -105,40 +102,20 @@ class TestEmailUpsert:
 
 class TestContactUpsert:
     def test_creates_contact_on_first_email(self, db: EmailDatabase) -> None:
-        db.save(make_email(sender="bob@example.com"), make_analysis(sentiment=0.6))
+        db.save(make_email(sender="bob@example.com"), make_analysis())
 
         contact = db.get_contact_history("bob@example.com")
         assert contact is not None
         assert isinstance(contact, ContactRecord)
         assert contact.total_emails == 1
-        assert contact.avg_sentiment == pytest.approx(0.6)
 
     def test_increments_count_on_second_email(self, db: EmailDatabase) -> None:
-        db.save(make_email("a", sender="carol@example.com"), make_analysis("a", sentiment=0.4))
-        db.save(make_email("b", sender="carol@example.com"), make_analysis("b", sentiment=0.8))
+        db.save(make_email("a", sender="carol@example.com"), make_analysis("a"))
+        db.save(make_email("b", sender="carol@example.com"), make_analysis("b"))
 
         contact = db.get_contact_history("carol@example.com")
         assert contact is not None
         assert contact.total_emails == 2
-
-    def test_recalculates_avg_sentiment(self, db: EmailDatabase) -> None:
-        db.save(make_email("a", sender="dan@example.com"), make_analysis("a", sentiment=0.0))
-        db.save(make_email("b", sender="dan@example.com"), make_analysis("b", sentiment=1.0))
-
-        contact = db.get_contact_history("dan@example.com")
-        assert contact is not None
-        assert contact.avg_sentiment == pytest.approx(0.5)
-
-    def test_three_emails_avg_sentiment(self, db: EmailDatabase) -> None:
-        for i, s in enumerate([0.0, 0.6, 0.9]):
-            db.save(
-                make_email(f"msg_{i}", sender="eve@example.com"),
-                make_analysis(f"msg_{i}", sentiment=s),
-            )
-
-        contact = db.get_contact_history("eve@example.com")
-        assert contact is not None
-        assert contact.avg_sentiment == pytest.approx(0.5)  # (0+0.6+0.9)/3
 
     def test_returns_none_for_unknown_contact(self, db: EmailDatabase) -> None:
         assert db.get_contact_history("nobody@example.com") is None
@@ -307,37 +284,52 @@ class TestGetStoredIdsSince:
         assert isinstance(result, set)
 
 
-# ── get_urgent_emails ───────────────────────────────────────────────────────────
+# ── get_human_emails_needing_reply ──────────────────────────────────────────────
 
 
-class TestGetUrgentEmails:
-    def test_returns_critical_and_high_emails(self, db: EmailDatabase) -> None:
-        db.save(make_email("critical_1"), make_analysis("critical_1", priority=Priority.CRITICAL))
-        db.save(make_email("high_1"), make_analysis("high_1", priority=Priority.HIGH))
-        db.save(make_email("medium_1"), make_analysis("medium_1", priority=Priority.MEDIUM))
+class TestGetHumanEmailsNeedingReply:
+    def test_returns_human_emails_with_reply_required(self, db: EmailDatabase) -> None:
+        db.save(
+            make_email(id="human_reply"),
+            make_analysis(email_id="human_reply", email_type=EmailType.HUMAN, requires_reply=True),
+        )
+        db.save(
+            make_email(id="human_no_reply"),
+            make_analysis(email_id="human_no_reply", email_type=EmailType.HUMAN, requires_reply=False),
+        )
+        db.save(
+            make_email(id="automated"),
+            make_analysis(email_id="automated", email_type=EmailType.AUTOMATED, domain=Domain.NEWSLETTER),
+        )
+        results = db.get_human_emails_needing_reply(hours=24)
+        ids = [r.id for r in results]
+        assert "human_reply" in ids
+        assert "human_no_reply" not in ids
+        assert "automated" not in ids
 
-        results = db.get_urgent_emails()
-        result_ids = {r.id for r in results}
-        assert "critical_1" in result_ids
-        assert "high_1" in result_ids
-        assert "medium_1" not in result_ids
+    def test_respects_hours_window(self, db: EmailDatabase) -> None:
+        db.save(
+            make_email(id="recent"),
+            make_analysis(email_id="recent", email_type=EmailType.HUMAN, requires_reply=True),
+        )
+        results = db.get_human_emails_needing_reply(hours=1)
+        assert any(r.id == "recent" for r in results)
 
     def test_returns_list_of_email_rows(self, db: EmailDatabase) -> None:
-        db.save(make_email("high_1"), make_analysis("high_1", priority=Priority.HIGH))
+        db.save(
+            make_email("human_1"),
+            make_analysis("human_1", email_type=EmailType.HUMAN, requires_reply=True),
+        )
 
-        results = db.get_urgent_emails()
+        results = db.get_human_emails_needing_reply()
         assert len(results) == 1
         assert isinstance(results[0], EmailRow)
 
-    def test_returns_empty_when_no_urgent_emails(self, db: EmailDatabase) -> None:
-        db.save(make_email("low_1"), make_analysis("low_1", priority=Priority.LOW))
+    def test_returns_empty_when_no_matching_emails(self, db: EmailDatabase) -> None:
+        db.save(
+            make_email("auto_1"),
+            make_analysis("auto_1", email_type=EmailType.AUTOMATED, domain=Domain.SHOPPING),
+        )
 
-        results = db.get_urgent_emails()
+        results = db.get_human_emails_needing_reply()
         assert results == []
-
-    def test_orders_by_priority_then_recency(self, db: EmailDatabase) -> None:
-        db.save(make_email("high_1"), make_analysis("high_1", priority=Priority.HIGH))
-        db.save(make_email("critical_1"), make_analysis("critical_1", priority=Priority.CRITICAL))
-
-        results = db.get_urgent_emails()
-        assert results[0].id == "critical_1"

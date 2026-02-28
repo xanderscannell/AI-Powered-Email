@@ -14,9 +14,8 @@ CREATE TABLE IF NOT EXISTS emails (
     snippet       TEXT NOT NULL,
     body          TEXT,
     date          TEXT,
-    sentiment     REAL NOT NULL,
-    intent        TEXT NOT NULL,
-    priority      INTEGER NOT NULL,
+    email_type    TEXT NOT NULL,
+    domain        TEXT,
     summary       TEXT NOT NULL,
     requires_reply INTEGER NOT NULL DEFAULT 0,
     deadline      TEXT,
@@ -29,7 +28,6 @@ _CREATE_CONTACTS = """
 CREATE TABLE IF NOT EXISTS contacts (
     email_address  TEXT PRIMARY KEY,
     total_emails   INTEGER NOT NULL DEFAULT 0,
-    avg_sentiment  REAL NOT NULL DEFAULT 0.0,
     last_contact   TEXT
 )
 """
@@ -76,9 +74,8 @@ class EmailRow:
     snippet: str
     body: str | None
     date: str | None
-    sentiment: float
-    intent: str
-    priority: int
+    email_type: str
+    domain: str | None
     summary: str
     requires_reply: bool
     deadline: str | None
@@ -117,5 +114,4 @@ class ContactRecord:
 
     email_address: str
     total_emails: int
-    avg_sentiment: float
     last_contact: str | None
