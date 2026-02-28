@@ -108,7 +108,7 @@ class AnalysisProcessor:
 
     On each email it:
       1. Calls Haiku via EmailAnalyzer → EmailAnalysis
-      2. Applies Gmail labels (priority, intent, star, follow-up)
+      2. Applies Gmail labels (AI/Human or AI/Automated/<Domain>, plus AI/Human/FollowUp if requires_reply)
       3. Writes to ChromaDB vector store  (if vector_store provided)
       4. Writes to SQLite database        (if db provided)
     """
