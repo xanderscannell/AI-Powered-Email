@@ -4,11 +4,11 @@
 
 ## Overview
 
-A local Python agent that integrates with Gmail and Google Calendar via MCP, processes emails through Claude Haiku for structured intelligence (sentiment, intent, priority, entities, summary), stores results in a local vector DB (ChromaDB) and SQLite, and provides daily briefings and an on-demand CLI interface. Everything runs on your machine with no external storage.
+A local Python agent that integrates with Gmail and Google Calendar via MCP, processes emails through Claude Haiku for structured intelligence (email type, domain, entities, summary, requires_reply, deadline), stores results in a local vector DB (ChromaDB) and SQLite, and provides daily briefings and an on-demand CLI interface. Everything runs on your machine with no external storage.
 
 ## Success Criteria
 
-- [ ] New emails are automatically labeled in Gmail based on AI-detected priority and intent
+- [ ] New emails are automatically labeled in Gmail based on AI-detected type (human/automated) and domain
 - [ ] Natural language search across entire email history works locally
 - [ ] Daily briefing is generated automatically with urgent items, follow-ups, and sentiment shifts
 - [ ] On-demand CLI lets you query, summarize, and draft email replies
@@ -56,9 +56,9 @@ A local Python agent that integrates with Gmail and Google Calendar via MCP, pro
 **Goal**: Every incoming email is analyzed by Haiku and results are written back to Gmail as labels.
 
 ### 2.1 Email Analysis Types
-- [ ] Define `EmailAnalysis` dataclass in `src/processing/types.py`
-  - Fields: sentiment, intent, priority, entities, summary, requires_reply, deadline
-- [ ] Define `Priority` and `Intent` enums
+- [x] Define `EmailAnalysis` dataclass in `src/processing/types.py`
+  - Fields: email_type, domain, entities, summary, requires_reply, deadline
+- [x] Define `EmailType` (human | automated) and `Domain` (12 values) enums
 
 ### 2.2 Haiku Analyzer
 - [ ] Implement `src/processing/analyzer.py`
@@ -75,7 +75,7 @@ A local Python agent that integrates with Gmail and Google Calendar via MCP, pro
 
 ### Phase 2 Milestones
 - [ ] New email arrives → Haiku analyzes → Gmail labels applied within 30 seconds
-- [ ] Priority-1 emails are starred automatically
+- [ ] Human emails land in `AI/Human`; automated emails land in `AI/Automated/<Domain>`
 
 ---
 
@@ -141,10 +141,10 @@ A local Python agent that integrates with Gmail and Google Calendar via MCP, pro
 **Goal**: A daily briefing is generated automatically each morning.
 
 ### 5.1 Briefing Generator
-- [ ] Implement `src/briefing/generator.py`
-  - Queries SQLite for: urgent emails (priority ≤ 2), follow-ups due today, upcoming deadlines
-  - Queries ChromaDB for: overnight activity, sentiment shifts
-  - Passes compiled context to Haiku (or Sonnet) → structured briefing markdown
+- [ ] Implement `src/briefing/generator.py` (skeleton exists)
+  - Queries SQLite for: human emails needing reply (last 24h), follow-ups due today, upcoming deadlines
+  - Queries ChromaDB for: overnight activity
+  - Passes compiled context to Sonnet → structured briefing markdown
 - [ ] Add `email briefing` CLI command for on-demand generation
 
 ### 5.2 Scheduler
