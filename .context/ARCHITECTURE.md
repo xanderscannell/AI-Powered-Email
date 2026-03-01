@@ -19,7 +19,7 @@ A local Python agent that watches Gmail via MCP, processes each email through Cl
                         ┌─────────────────────────────────┐
                         │       Processing Layer           │
                         │  Claude Haiku API                │
-                        │  → sentiment, intent, priority   │
+                        │  → email_type, domain            │
                         │  → entities, summary             │
                         └──────┬───────────┬──────────────┘
                                │           │           │
@@ -75,9 +75,9 @@ A local Python agent that watches Gmail via MCP, processes each email through Cl
 
 **Interfaces**:
 - Input: Raw email object
-- Output: `EmailAnalysis` dataclass — sentiment, intent, priority (1-5), entities, one-line summary, requires_reply (bool), deadline (optional date)
+- Output: `EmailAnalysis` dataclass — email_type (human|automated), domain (12 values), entities, one-line summary, requires_reply (bool), deadline (optional date)
 
-**Notes**: Haiku is used because it's fast and cheap enough to run on every incoming email. Batch processing for historical emails.
+**Notes**: Haiku is used because it's fast and cheap enough to run on every incoming email. Backfill uses the Anthropic Batches API (single batch submission, polled until complete) for ~50% cost reduction. HTML is stripped from email bodies before the 4000-char truncation. `AnalysisProcessor.process_with_analysis(email_id, analysis)` handles fan-out from a pre-computed batch result without calling the API.
 
 ---
 
@@ -92,7 +92,7 @@ A local Python agent that watches Gmail via MCP, processes each email through Cl
 - Input: Raw email + `EmailAnalysis`
 - Output: Queryable collection; returns (email_id, similarity_score, metadata) tuples
 
-**Notes**: ChromaDB runs in local persistent mode — no server process. DB files live in `data/chroma/`.
+**Notes**: ChromaDB runs in local persistent mode — no server process. DB files live in `data/chroma/`. Uses `hnsw:space=cosine` distance so similarity scores always fall in [0,1]. Run `email-agent reindex` to rebuild from SQLite after deleting the chroma directory or changing the distance metric.
 
 ---
 
@@ -105,10 +105,12 @@ A local Python agent that watches Gmail via MCP, processes each email through Cl
 - `src/storage/models.py`
 
 **Tables**:
-- `emails` — id, thread_id, sender, subject, timestamp, priority, intent, sentiment, summary
-- `contacts` — email_address, name, avg_sentiment, last_contact, total_emails
+- `emails` — id, thread_id, sender, subject, timestamp, email_type, domain, summary, requires_reply, deadline
+- `contacts` — email_address, name, last_contact, total_emails
 - `follow_ups` — email_id, due_date, status, notes
 - `deadlines` — email_id, deadline_date, description, status
+
+**Key methods**: `get_human_emails_needing_reply(hours)`, `get_pending_follow_ups()`, `get_upcoming_deadlines()`, `get_all_emails()` (for reindex). FK constraints enforced via `PRAGMA foreign_keys=ON`.
 
 ---
 
@@ -119,11 +121,11 @@ A local Python agent that watches Gmail via MCP, processes each email through Cl
 **Key files**:
 - `src/mcp/gmail_client.py` (label write methods)
 
-**Label scheme**:
-- `AI/Priority/High`, `AI/Priority/Medium`, `AI/Priority/Low`
-- `AI/Intent/ActionRequired`, `AI/Intent/FYI`, `AI/Intent/Question`
-- `AI/FollowUp` — emails needing a reply
-- Stars for priority-1 emails
+**Label scheme** (16 hierarchical labels):
+- `AI/Human` — human-authored emails
+- `AI/Human/FollowUp` — human emails that require a reply
+- `AI/Automated/<Domain>` — automated emails by domain (e.g. `AI/Automated/Newsletters`, `AI/Automated/Receipts`, `AI/Automated/Notifications`, etc.)
+- FollowUp label is reserved for human emails only; automated emails never receive it
 
 ---
 
@@ -150,12 +152,15 @@ A local Python agent that watches Gmail via MCP, processes each email through Cl
 - `src/cli/main.py`
 - `src/cli/commands.py`
 
-**Key commands**:
-- `email summarize-unread` — summarize all unread emails
-- `email search "<query>"` — semantic search
-- `email draft-reply <email_id>` — generate a reply draft
-- `email status <project>` — thread status for a topic
-- `email briefing` — run briefing on demand
+**Implemented commands**:
+- `email-agent search "<query>"` — semantic search via ChromaDB + SQLite
+- `email-agent status` — database + vector store stats summary
+- `email-agent backfill --days N` — process historical emails via Batches API
+- `email-agent reindex` — rebuild ChromaDB from SQLite (no API calls)
+
+**Planned commands** (Phase 5-6):
+- `email-agent briefing` — on-demand daily digest
+- `email-agent draft-reply <email_id>` — generate a reply draft
 
 ---
 

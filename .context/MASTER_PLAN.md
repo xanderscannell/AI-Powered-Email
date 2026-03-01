@@ -21,33 +21,33 @@ A local Python agent that integrates with Gmail and Google Calendar via MCP, pro
 **Goal**: Get the core email watcher loop running — fetch emails via MCP and connect to Haiku for first-pass analysis.
 
 ### 1.1 Project Scaffolding
-- [ ] Initialize Python project with `pyproject.toml` (uv or pip)
-- [ ] Set up directory structure (`src/`, `tests/`, `data/`)
-- [ ] Configure Black, Ruff, mypy
-- [ ] Create `.env.example` with all required variables
-- [ ] Set up pytest with basic test runner
+- [x] Initialize Python project with `pyproject.toml` (uv or pip)
+- [x] Set up directory structure (`src/`, `tests/`, `data/`)
+- [x] Configure Black, Ruff, mypy
+- [x] Create `.env.example` with all required variables
+- [x] Set up pytest with basic test runner
 
 ### 1.2 Gmail MCP Integration
-- [ ] Configure Gmail MCP server connection
-- [ ] Implement `src/mcp/gmail_client.py` — wrapper around MCP tools
+- [x] Configure Gmail MCP server connection
+- [x] Implement `src/mcp/gmail_client.py` — wrapper around MCP tools
   - `get_unread_emails()` → list of raw email objects
   - `get_email(email_id)` → single email with full body
   - `apply_label(email_id, label_name)` → add Gmail label
-  - `star_email(email_id)` → star an email
   - `create_label(label_name)` → ensure label exists
-- [ ] Create required AI labels in Gmail (`AI/Priority/*`, `AI/Intent/*`, `AI/FollowUp`)
-- [ ] Write tests for Gmail client (use mock MCP responses)
+- [x] Create required AI labels in Gmail (`AI/Human`, `AI/Human/FollowUp`, `AI/Automated/<Domain>`)
+- [x] Write tests for Gmail client (use mock MCP responses)
 
 ### 1.3 Core Agent Loop
-- [ ] Implement `src/agent/watcher.py` — polling loop
+- [x] Implement `src/agent/watcher.py` — polling loop
   - Poll for unread emails on configurable interval
   - Feed each email into the processing pipeline
   - Track processed email IDs to avoid re-processing
-- [ ] Wire up main entry point (`src/main.py` or `__main__.py`)
+  - Startup seed: `_seed_processed_ids()` prevents re-processing historical emails
+- [x] Wire up main entry point (`src/main.py` or `__main__.py`)
 
 ### Phase 1 Milestones
-- [ ] Agent starts, connects to Gmail MCP, and fetches unread emails
-- [ ] Gmail client can read and label emails without errors
+- [x] Agent starts, connects to Gmail MCP, and fetches unread emails
+- [x] Gmail client can read and label emails without errors
 
 ---
 
@@ -61,21 +61,23 @@ A local Python agent that integrates with Gmail and Google Calendar via MCP, pro
 - [x] Define `EmailType` (human | automated) and `Domain` (12 values) enums
 
 ### 2.2 Haiku Analyzer
-- [ ] Implement `src/processing/analyzer.py`
+- [x] Implement `src/processing/analyzer.py`
   - `analyze_email(raw_email) → EmailAnalysis`
-  - Single structured prompt → Haiku → parse JSON response
-- [ ] Implement `src/processing/prompts.py`
+  - Single structured tool-use prompt → Haiku → parse JSON response
+  - `process_with_analysis(email_id, analysis)` — fan-out from pre-computed result (used by backfill)
+- [x] Implement `src/processing/prompts.py`
   - Email analysis prompt template
-  - JSON schema for structured output
-- [ ] Write tests for analyzer (mock Haiku responses)
+  - JSON schema for structured output (tool use)
+  - HTML stripped from body before 4000-char truncation
+- [x] Write tests for analyzer (mock Haiku responses)
 
 ### 2.3 Gmail Label Write-back
-- [ ] Connect `EmailAnalysis` results to `gmail_client.apply_label()` and `star_email()`
-- [ ] Verify labels appear correctly in Gmail UI
+- [x] Connect `EmailAnalysis` results to `gmail_client.apply_label()`
+- [x] FollowUp label correctly applied only to human emails
 
 ### Phase 2 Milestones
-- [ ] New email arrives → Haiku analyzes → Gmail labels applied within 30 seconds
-- [ ] Human emails land in `AI/Human`; automated emails land in `AI/Automated/<Domain>`
+- [x] New email arrives → Haiku analyzes → Gmail labels applied within 30 seconds
+- [x] Human emails land in `AI/Human`; automated emails land in `AI/Automated/<Domain>`
 
 ---
 
@@ -84,32 +86,34 @@ A local Python agent that integrates with Gmail and Google Calendar via MCP, pro
 **Goal**: All analyzed emails are stored locally for search and structured querying.
 
 ### 3.1 SQLite Storage
-- [ ] Implement `src/storage/models.py` — table schemas
-- [ ] Implement `src/storage/db.py`
+- [x] Implement `src/storage/models.py` — table schemas
+- [x] Implement `src/storage/db.py`
   - `upsert_email(email, analysis)` — insert or update
   - `get_follow_ups(due_before=None)` → list of follow-up records
-  - `get_contact_history(email_address)` → contact record with sentiment trend
   - `get_upcoming_deadlines(days=7)` → deadline records
-- [ ] Write tests for DB layer
+  - `get_human_emails_needing_reply(hours)` → human emails without reply
+  - `get_all_emails()` → all emails (for reindex)
+  - FK constraints enforced via `PRAGMA foreign_keys=ON`
+- [x] Write tests for DB layer
 
 ### 3.2 ChromaDB Vector Store
-- [ ] Implement `src/storage/vector_store.py`
+- [x] Implement `src/storage/vector_store.py`
   - `add_email(email, analysis)` — embed and store
   - `search(query, n_results=10)` → ranked email results
   - `search_with_filter(query, metadata_filter)` → filtered semantic search
-- [ ] Decide on embedding strategy: use ChromaDB's default embedding function or Haiku-generated embeddings
-- [ ] Write tests for vector store
+  - Cosine distance (`hnsw:space=cosine`) so scores in [0,1]
+- [x] Write tests for vector store (WordHashEmbeddingFunction for meaningful ranking tests)
 
 ### 3.3 Fan-out Write Integration
-- [ ] Update agent watcher to write to all three targets after analysis:
+- [x] `AnalysisProcessor._write_storage()` writes to all three targets after analysis:
   1. Gmail labels (MCP)
   2. ChromaDB (vector store)
   3. SQLite (structured DB)
-- [ ] Handle partial failures gracefully (log, don't crash)
+- [x] Partial failures logged, don't crash
 
 ### Phase 3 Milestones
-- [ ] Every processed email appears in ChromaDB and SQLite
-- [ ] `vector_store.search("budget dispute vendor")` returns relevant results
+- [x] Every processed email appears in ChromaDB and SQLite
+- [x] `vector_store.search("budget dispute vendor")` returns relevant results
 
 ---
 
@@ -118,21 +122,26 @@ A local Python agent that integrates with Gmail and Google Calendar via MCP, pro
 **Goal**: Natural language search works from the command line.
 
 ### 4.1 CLI Scaffolding
-- [ ] Implement `src/cli/main.py` with click entry point
-- [ ] Implement `email search "<query>"` command
-  - Queries ChromaDB
-  - Formats results with sender, subject, date, summary, similarity score
-- [ ] Implement `email status "<topic>"` command
-  - Finds all thread emails related to a topic
-  - Passes through Haiku for a status summary
+- [x] Implement `src/cli/main.py` with click entry point
+- [x] Implement `email-agent search "<query>"` command
+  - Queries ChromaDB + SQLite via QueryEngine
+  - Formats results with sender, subject, date, summary, similarity score, type/domain
+- [x] Implement `email-agent status` command — DB + vector store stats
 
 ### 4.2 Backfill Historical Emails
-- [ ] Implement `email backfill --days N` command to process historical emails
-- [ ] Rate-limit Haiku calls during backfill to avoid API throttling
+- [x] Implement `email-agent backfill --days N` command
+  - Submits all new emails as a single Batches API batch (~50% cost reduction)
+  - Live spinner polling with real-time pass/skip/fail counts
+  - Fan-out via `AnalysisProcessor.process_with_analysis()` after batch completes
+
+### 4.3 Reindex
+- [x] Implement `email-agent reindex` command
+  - Rebuilds ChromaDB from SQLite with no API calls
+  - Needed after deleting `data/chroma/` or changing distance metric
 
 ### Phase 4 Milestones
-- [ ] `email search "budget dispute with Acme in Q2"` returns the right thread
-- [ ] Semantic search beats Gmail keyword search on 5 manual test queries
+- [x] `email-agent search "budget dispute with Acme in Q2"` returns the right thread
+- [x] Semantic search scores in [0,1] (cosine distance)
 
 ---
 

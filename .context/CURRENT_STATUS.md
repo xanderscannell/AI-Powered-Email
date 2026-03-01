@@ -1,6 +1,6 @@
 # Project Status
 
-**Last updated**: 2026-02-28
+**Last updated**: 2026-03-01
 
 ## Current Position
 
@@ -26,6 +26,20 @@
   - Design doc: `docs/plans/2026-02-28-schema-redesign-design.md`
   - Implementation plan: `docs/plans/2026-02-28-schema-redesign-plan.md`
   - Changes: `processing/types.py` (EmailType + Domain enums), `processing/prompts.py` (tool schema), `processing/analyzer.py` (parse + label logic), `mcp/gmail_client.py` (AI_LABELS — 16 hierarchical labels), `storage/models.py` (schema: email_type/domain columns), `storage/db.py` (upserts + `get_human_emails_needing_reply`), `storage/vector_store.py` (metadata), `cli/commands.py` (Type/Domain columns in search table), `cli/query.py` (renamed method), `briefing/generator.py` (prompt + method call)
+- **Analyzer bug fix** (2026-02-28): `AI/Human/FollowUp` label was being incorrectly applied to automated emails. Fixed `_apply_labels` so only human emails ever receive the FollowUp label. Regression test added.
+- **Windows MCP fix** (2026-02-28): `PYTHONUTF8=1` added to workspace-mcp subprocess env to suppress Unicode logging errors on Windows.
+- **Batches API backfill** (2026-02-28): Replaced per-email rate-limited loop with Anthropic Batches API submission. ~50% cost reduction, no per-call rate limiting needed.
+  - New `AnalysisProcessor.process_with_analysis(email_id, analysis)` method for batch result fan-out
+  - Live spinner during batch polling with real-time pass/skip/fail counts
+  - HTML stripped from email bodies before 4000-char truncation
+  - ANALYSIS_TOOL descriptions trimmed to reduce fixed token overhead
+  - `src.*` modules now surface at INFO level; third-party noise stays at WARNING
+  - 204 tests passing (13 pre-existing failures in `test_watcher.py` and `test_briefing_scheduler.py`)
+- **Cosine distance + reindex** (2026-03-01): Vector store now uses `hnsw:space=cosine` so similarity scores fall in [0,1]. Added `email-agent reindex` command to rebuild ChromaDB from SQLite with no API calls.
+  - `EmailDatabase.get_all_emails()` added to support reindex
+  - `PRAGMA foreign_keys=ON` now enforced
+  - Test embeddings upgraded to `WordHashEmbeddingFunction` (bag-of-words hashing) for meaningful semantic ranking tests
+  - 9 new tests in `TestSemanticRanking` and `TestScaleAndIntegrity`
 
 ## In Progress
 
@@ -50,7 +64,7 @@ src/
 ├── processing/     [status: done — types.py, prompts.py, analyzer.py]
 ├── storage/        [status: done — models.py, db.py, vector_store.py]
 ├── briefing/       [status: skeleton exists — generator.py, scheduler.py]
-└── cli/            [status: done — query.py, main.py, commands.py]
+└── cli/            [status: done — query.py, main.py, commands.py (search/status/backfill/reindex)]
 ```
 
 ## Recent Decisions
@@ -88,4 +102,8 @@ None currently.
 - **Schema**: EmailType (human | automated) + Domain (12 values). Human → `AI/Human` label (+ `AI/Human/FollowUp`). Automated → `AI/Automated/<Domain>` label.
 - **Key methods**: `db.get_human_emails_needing_reply(hours)` — NOT `get_urgent_emails` (renamed in schema redesign)
 - Phase 5 QueryEngine extensions already implemented: `get_human_emails_needing_reply()`, `get_pending_follow_ups()`, `get_open_deadlines()`
-- 13 pre-existing test failures in `test_watcher.py` and `test_briefing_scheduler.py` — unrelated to schema redesign
+- `AnalysisProcessor.process_with_analysis(email_id, analysis)` — used by backfill to fan out a pre-computed batch result; does NOT call the API
+- `email-agent reindex` — rebuilds ChromaDB from SQLite with no API calls; run after deleting `data/chroma/` or changing distance metric
+- Vector store uses cosine distance (`hnsw:space=cosine`); similarity scores always in [0,1]
+- HTML is stripped from email bodies before the 4000-char truncation in the processing prompt
+- 13 pre-existing test failures in `test_watcher.py` and `test_briefing_scheduler.py` — unrelated to recent changes; 204 tests passing

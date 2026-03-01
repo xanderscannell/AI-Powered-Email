@@ -191,3 +191,60 @@ Introduce a `QueryEngine` class (`src/cli/query.py`) that wraps both stores and 
 **Alternatives considered**:
 - Direct store calls from command handlers: Simpler for Phase 4 alone, but duplicates coordination logic across commands and makes Phase 5 harder
 - Separate `BriefingQueryEngine` in Phase 5: Would duplicate `QueryEngine` logic; better to extend one class
+
+---
+
+## ADR-008: Anthropic Batches API for Backfill
+
+**Date**: 2026-02-28
+**Status**: Accepted
+
+**Context**:
+The original `backfill` command processed emails one at a time with a rate-limiting delay between API calls. This was slow and incurred full per-call overhead for every email.
+
+**Decision**:
+Submit all backfill emails as a single Anthropic Batches API batch, poll until complete, then fan out results.
+
+**Rationale**:
+- Batches API offers ~50% cost reduction with no per-call rate limiting
+- Single submission + polling is simpler than managing a rate-limited loop
+- `AnalysisProcessor.process_with_analysis(email_id, analysis)` decouples fan-out from API calls, enabling batch + real-time paths to share the same write logic
+
+**Consequences**:
+- (+) ~50% cost reduction on backfill runs
+- (+) No per-call rate limiting needed
+- (+) Fan-out logic is now reusable across real-time and batch paths
+- (-) Batch results arrive asynchronously; must poll until complete (currently blocking with spinner)
+- (-) Requires internet connectivity for the full batch to process; no partial resumption
+
+**Alternatives considered**:
+- Per-email loop with rate limiting: Simpler but 2× the cost and slower
+- Async parallel calls: More complex to implement and still subject to rate limits
+
+---
+
+## ADR-009: Cosine Distance for ChromaDB Vector Store
+
+**Date**: 2026-03-01
+**Status**: Accepted
+
+**Context**:
+ChromaDB's default distance metric is L2 (Euclidean). With L2, distances can exceed 1.0, causing `similarity_score = 1 - distance` to go negative. The CLI was clamping all scores to 0, making similarity output meaningless.
+
+**Decision**:
+Configure the ChromaDB collection with `hnsw:space=cosine` so similarity scores always fall in [0,1].
+
+**Rationale**:
+- Cosine similarity is the standard metric for semantic search with embedding models
+- Scores in [0,1] are directly interpretable by users and easier to threshold
+- The existing collection must be rebuilt when changing the metric; `email-agent reindex` handles this
+
+**Consequences**:
+- (+) Similarity scores in [0,1] — meaningful and directly displayable
+- (+) Standard metric for NLP embedding search
+- (-) Existing `data/chroma/` directories built with L2 must be reindexed; one-time migration
+- (-) Cosine distance is slightly more expensive to compute than L2 (negligible at email scale)
+
+**Alternatives considered**:
+- L2 (default): Works but produces > 1.0 distances for non-unit vectors
+- Inner product: Requires unit-normalized embeddings; adds preprocessing complexity
