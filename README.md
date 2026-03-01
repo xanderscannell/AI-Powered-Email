@@ -450,3 +450,50 @@ this to your `.env`:
 ```bash
 PYTHONUTF8=1
 ```
+
+## Development
+
+### Running Tests
+
+```bash
+# Run all tests
+uv run pytest
+
+# Run a specific module
+uv run pytest tests/test_processing/
+
+# Run with coverage report
+uv run pytest --cov=src --cov-report=term-missing
+```
+
+> 13 tests in `test_watcher.py` and `test_briefing_scheduler.py` are
+> currently expected to fail — they cover Phase 5 work that is not yet
+> complete.
+
+### Linting and Formatting
+
+```bash
+make format      # auto-format with Black + Ruff
+make lint        # check without modifying
+make typecheck   # run mypy
+make check       # lint + typecheck + tests
+```
+
+### Project Structure
+
+```
+src/
+├── agent/         # Email watcher — polling loop and startup seeding
+├── mcp/           # Gmail MCP client wrapper (workspace-mcp)
+├── processing/    # Claude Haiku analyzer, prompts, HTML stripping
+├── storage/       # ChromaDB vector store + SQLite database
+├── briefing/      # Briefing generator + APScheduler (Phase 5, in progress)
+└── cli/           # Click CLI — search, status, backfill, reindex
+data/
+├── chroma/        # ChromaDB vector store files (gitignored)
+├── briefings/     # Generated briefing markdown files (gitignored)
+└── email_agent.db # SQLite database (gitignored)
+docs/
+└── plans/         # Design docs and implementation plans
+.context/          # CDS session context (architecture, decisions, status)
+```
