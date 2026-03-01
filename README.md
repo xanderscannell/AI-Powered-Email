@@ -210,3 +210,45 @@ mkdir -p data/chroma data/briefings
 
 > Both `data/chroma/` and `data/email_agent.db` are gitignored — your email
 > data never leaves your machine.
+
+## Step 4: First Run and Verify
+
+### 4.1 Backfill Historical Emails
+
+Before starting the watcher, populate the search index with your recent
+email history:
+
+```bash
+uv run email-agent backfill --days 30
+```
+
+> **First run only**: `workspace-mcp` will open a browser window for the
+> OAuth flow (see Step 2.5). After you click Allow, the token is cached and
+> this will not happen again.
+
+A live progress spinner shows real-time counts as the Anthropic Batches API
+processes your emails. When complete, each email is stored in ChromaDB and
+SQLite and labeled in Gmail.
+
+### 4.2 Verify the Setup
+
+```bash
+# Show database and vector store stats
+uv run email-agent status
+
+# Try a semantic search
+uv run email-agent search "invoice from last month"
+```
+
+Expected `status` output:
+
+```
+Emails in database:         142
+Emails in vector store:     142
+Human emails needing reply:   3
+Pending follow-ups:           1
+```
+
+> If `status` shows 0 emails, the backfill may not have completed. Run
+> `uv run email-agent backfill --days 30` again and check for errors in
+> the output.
