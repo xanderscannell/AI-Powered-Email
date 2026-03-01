@@ -252,3 +252,68 @@ Pending follow-ups:           1
 > If `status` shows 0 emails, the backfill may not have completed. Run
 > `uv run email-agent backfill --days 30` again and check for errors in
 > the output.
+
+## Watcher: Real-Time Email Monitoring
+
+The watcher is a long-running process that polls Gmail every 60 seconds
+(configurable via `POLL_INTERVAL_SECONDS`), analyzes new emails with Claude
+Haiku, and fans out results to Gmail labels, ChromaDB, and SQLite.
+
+### Start the Watcher
+
+```bash
+uv run python -m src
+```
+
+Leave this running in a terminal. You will see log output as emails arrive:
+
+```
+INFO  Gmail MCP client connected (you@gmail.com)
+INFO  Seeded 247 already-processed email IDs
+INFO  Watching for new emails (poll interval: 60s)
+INFO  Processing email abc123 — "Re: Q1 Budget Review"
+INFO  Analysis: type=human domain=work requires_reply=True
+INFO  Wrote to SQLite, ChromaDB, Gmail labels
+```
+
+### What It Does to Your Inbox
+
+When a new email arrives, the watcher:
+
+1. Fetches it via the Gmail MCP server
+2. Strips HTML and sends the plain-text body to Claude Haiku for analysis
+3. Writes results to three places simultaneously:
+   - **Gmail**: applies `AI/Human` or `AI/Automated/<Domain>` label
+     (plus `AI/Human/FollowUp` if the email requires a reply)
+   - **ChromaDB**: stores an embedding for semantic search
+   - **SQLite**: stores structured metadata (type, domain, summary, deadlines)
+
+### Gmail Labels Created
+
+On first run the watcher auto-creates these labels in your Gmail sidebar:
+
+```
+AI/
+├── Human
+│   └── FollowUp
+└── Automated
+    ├── Finance
+    ├── Shopping
+    ├── Travel
+    ├── Health
+    ├── Government
+    ├── Work
+    ├── Education
+    ├── Newsletter
+    ├── Marketing
+    ├── Social
+    ├── Alerts
+    └── Other
+```
+
+### Stopping the Watcher
+
+`Ctrl+C` — the agent handles shutdown cleanly.
+
+> ⚠️ Run only one watcher instance at a time. Multiple instances will
+> conflict on the SQLite database.
