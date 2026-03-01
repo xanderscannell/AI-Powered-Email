@@ -147,3 +147,66 @@ afterward.
 > **Advanced → Go to Email Agent (unsafe)**. This warning is expected for
 > personal OAuth apps that have not gone through Google's formal verification
 > process. Your credentials only access your own account.
+
+## Step 3: Install and Configure
+
+### 3.1 Clone and Install
+
+```bash
+git clone <repo-url>
+cd AI-Powered-Email
+
+# Install all dependencies including dev tools (creates .venv automatically)
+uv sync --extra dev
+```
+
+### 3.2 Configure Environment Variables
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` in your editor and fill in your values:
+
+```bash
+# ── Anthropic API ──────────────────────────────────────────────────────
+# From Step 1
+ANTHROPIC_API_KEY=sk-ant-api03-...
+
+# ── Google OAuth ───────────────────────────────────────────────────────
+# From Step 2.4
+GOOGLE_OAUTH_CLIENT_ID=123456789.apps.googleusercontent.com
+GOOGLE_OAUTH_CLIENT_SECRET=GOCSPX-...
+# The Gmail account to monitor
+USER_GOOGLE_EMAIL=your@gmail.com
+
+# ── MCP Server ─────────────────────────────────────────────────────────
+# Leave as "uvx" — workspace-mcp runs via uvx, no separate install needed
+GMAIL_MCP_SERVER_PATH=uvx
+GCAL_MCP_SERVER_PATH=uvx
+
+# ── Storage Paths ──────────────────────────────────────────────────────
+# Leave as-is unless you want to store data elsewhere
+CHROMA_PATH=data/chroma
+SQLITE_PATH=data/email_agent.db
+
+# ── Briefing (Phase 5 — not yet active) ────────────────────────────────
+BRIEFING_TIME=07:00
+BRIEFING_OUTPUT_TERMINAL=true
+BRIEFING_OUTPUT_FILE=false
+BRIEFING_OUTPUT_EMAIL=false
+BRIEFING_EMAIL_TO=your@gmail.com
+
+# ── Email Polling ──────────────────────────────────────────────────────
+# How often the watcher checks for new emails (seconds)
+POLL_INTERVAL_SECONDS=60
+```
+
+### 3.3 Create Data Directories
+
+```bash
+mkdir -p data/chroma data/briefings
+```
+
+> Both `data/chroma/` and `data/email_agent.db` are gitignored — your email
+> data never leaves your machine.
