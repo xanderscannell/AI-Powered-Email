@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import webbrowser
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -56,6 +57,21 @@ _JsonValue = dict[str, Any] | list[Any] | str | None
 
 class MCPError(Exception):
     """Raised when a workspace-mcp tool call returns an error."""
+
+
+class MCPAuthRequiredError(MCPError):
+    """workspace-mcp needs Google OAuth authorization before it can proceed.
+
+    Carries the authorization URL so the caller can present it to the user
+    *without* tearing down the subprocess — which hosts the OAuth callback
+    server at ``localhost:<port>/oauth2callback``.  If the subprocess dies
+    before the callback is received, the state token is lost and the browser
+    shows "Invalid or expired OAuth state parameter".
+    """
+
+    def __init__(self, tool_name: str, auth_url: str | None) -> None:
+        super().__init__(f"Tool {tool_name!r} requires Google authentication")
+        self.auth_url = auth_url
 
 
 class GmailClient:
@@ -272,7 +288,23 @@ class GmailClient:
         result = await self._session.call_tool(tool_name, arguments)
 
         if result.isError:
-            raise MCPError(f"Tool {tool_name!r} returned error: {result.content}")
+            # Extract the text from the first TextContent block (same as success path)
+            error_text = ""
+            for item in result.content or []:
+                if isinstance(item, TextContent):
+                    error_text = item.text
+                    break
+            if not error_text:
+                error_text = str(result.content)
+            # workspace-mcp signals unauthenticated state with an ACTION REQUIRED
+            # message that embeds the OAuth authorization URL.  Raise a dedicated
+            # exception so the caller can keep the subprocess alive long enough for
+            # the OAuth callback to arrive (see ``gmail_client()`` below).
+            if "ACTION REQUIRED" in error_text and "Google Authentication" in error_text:
+                url_match = re.search(r"Authorization URL:\s*(https://\S+)", error_text)
+                auth_url = url_match.group(1) if url_match else None
+                raise MCPAuthRequiredError(tool_name, auth_url=auth_url)
+            raise MCPError(f"Tool {tool_name!r} returned error: {error_text}")
 
         if not result.content:
             return None
@@ -396,6 +428,56 @@ class GmailClient:
 
 _MCP_CONNECT_RETRIES = 5
 _MCP_RETRY_DELAY_SECONDS = 3
+_AUTH_POLL_INTERVAL = 5    # seconds between auth-completion polls
+_AUTH_POLL_TIMEOUT = 300   # give up waiting for auth after 5 minutes
+
+
+def _print_auth_prompt(auth_url: str | None) -> None:
+    """Print a clear authentication prompt and open the browser."""
+    bar = "=" * 72
+    print(f"\n{bar}", flush=True)
+    print("  GOOGLE AUTHENTICATION REQUIRED", flush=True)
+    print(bar, flush=True)
+    print("  Open the URL below in your browser to authorize Gmail access:", flush=True)
+    if auth_url:
+        print(f"\n  {auth_url}\n", flush=True)
+        webbrowser.open(auth_url)
+    else:
+        print("\n  (URL not found — check the log above for the authorization link)\n", flush=True)
+    print("  Waiting for you to complete authentication in your browser ...", flush=True)
+    print(f"{bar}\n", flush=True)
+
+
+async def _poll_until_authenticated(
+    client: GmailClient,
+    timeout: int = _AUTH_POLL_TIMEOUT,
+) -> None:
+    """Keep the MCP subprocess alive while polling for OAuth completion.
+
+    ``workspace-mcp`` hosts the OAuth callback server
+    (``localhost:<port>/oauth2callback``) *inside the subprocess*.  We must
+    stay inside the ``stdio_client`` context — keeping the process alive —
+    while the user authenticates.  Killing the process before the callback
+    arrives destroys the in-memory OAuth state and the browser shows
+    "Invalid or expired OAuth state parameter".
+
+    Polls ``list_gmail_labels`` every few seconds.  Returns when the call
+    succeeds (authentication complete).  Raises ``MCPError`` on timeout.
+    """
+    elapsed = 0
+    while elapsed < timeout:
+        await asyncio.sleep(_AUTH_POLL_INTERVAL)
+        elapsed += _AUTH_POLL_INTERVAL
+        try:
+            await client._refresh_label_cache()
+            logger.info("Google authentication completed — proceeding")
+            return
+        except MCPAuthRequiredError:
+            pass  # still waiting for the user to authorize in the browser
+    raise MCPError(
+        f"Google authentication timed out after {timeout}s — "
+        "please restart and try again"
+    )
 
 
 @asynccontextmanager
@@ -464,7 +546,15 @@ async def gmail_client(
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     client = GmailClient(session, email)
-                    await client._refresh_label_cache()
+                    try:
+                        await client._refresh_label_cache()
+                    except MCPAuthRequiredError as auth_err:
+                        # workspace-mcp needs OAuth credentials.  We must stay
+                        # inside this context (keeping the subprocess alive) so
+                        # the callback server on localhost:<port> keeps running.
+                        # Print the URL and poll until auth completes.
+                        _print_auth_prompt(auth_err.auth_url)
+                        await _poll_until_authenticated(client)
                     logger.info("Gmail MCP client connected (%s)", email)
                     yield client
                     return  # clean exit from the context manager

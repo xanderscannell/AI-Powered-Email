@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.mcp.gmail_client import AI_LABELS, GmailClient, MCPError
+from src.mcp.gmail_client import AI_LABELS, GmailClient, MCPAuthRequiredError, MCPError
 from src.mcp.types import RawEmail
 
 
@@ -200,6 +200,41 @@ class TestGetEmail:
         session.call_tool.return_value = _error_result("Message not found")
         with pytest.raises(MCPError, match="returned error"):
             await client.get_email("nonexistent")
+
+
+# ── MCPAuthRequired detection ──────────────────────────────────────────────────
+
+
+class TestMCPAuthRequiredError:
+    async def test_auth_error_raises_mcp_auth_required_error(
+        self, client: GmailClient, session: MagicMock
+    ) -> None:
+        auth_msg = (
+            "ACTION REQUIRED: Google Authentication Needed for Google Gmail for 'test@example.com'\n"
+            "Authorization URL: https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=123"
+        )
+        session.call_tool.return_value = _error_result(auth_msg)
+        with pytest.raises(MCPAuthRequiredError) as exc_info:
+            await client.get_email("msg_1")
+        assert "accounts.google.com" in exc_info.value.auth_url
+        assert isinstance(exc_info.value, MCPError)  # subclass check
+
+    async def test_auth_error_without_url_sets_auth_url_to_none(
+        self, client: GmailClient, session: MagicMock
+    ) -> None:
+        auth_msg = "ACTION REQUIRED: Google Authentication Needed for Google Gmail for 'test@example.com'"
+        session.call_tool.return_value = _error_result(auth_msg)
+        with pytest.raises(MCPAuthRequiredError) as exc_info:
+            await client.get_email("msg_1")
+        assert exc_info.value.auth_url is None
+
+    async def test_non_auth_error_raises_plain_mcp_error(
+        self, client: GmailClient, session: MagicMock
+    ) -> None:
+        session.call_tool.return_value = _error_result("Some other error")
+        with pytest.raises(MCPError) as exc_info:
+            await client.get_email("msg_1")
+        assert not isinstance(exc_info.value, MCPAuthRequiredError)
 
 
 # ── apply_label ────────────────────────────────────────────────────────────────
