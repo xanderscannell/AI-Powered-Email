@@ -60,3 +60,16 @@ search and daily briefings. Everything runs on your machine — no cloud storage
 
 > **Windows users**: the agent works on Windows via Git Bash or PowerShell.
 > `PYTHONUTF8=1` is set automatically to handle Unicode characters in logs.
+
+## Step 1: Get Your Anthropic API Key
+
+1. Go to [console.anthropic.com](https://console.anthropic.com) and sign in
+   (or create a free account).
+2. In the left sidebar, click **API Keys**.
+3. Click **Create Key**, give it a name (e.g. `email-agent`), and click **Create Key**.
+4. **Copy the key immediately** — it will not be shown again. It starts with `sk-ant-api03-...`
+5. You will paste this into your `.env` file in Step 3.
+
+> **Cost**: The agent uses Claude Haiku for per-email analysis (~$0.001 per
+> email) and the Anthropic Batches API for backfill (~50% cheaper than
+> real-time calls). At typical personal inbox volume, expect a few cents per day.
