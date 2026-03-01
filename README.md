@@ -16,42 +16,38 @@ search and daily briefings. Everything runs on your machine — no cloud storage
   and upcoming deadlines
 
 ```
-┌─────────────────────┐
-│   Gmail (via MCP)   │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│   Email Watcher     │
-│  (polls every 60s)  │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  Claude Haiku API   │
-│  email_type         │
-│  domain             │
-│  summary            │
-│  requires_reply     │
-└─────────┬───────────┘
-          │
-          ▼ fan-out
-┌─────────┴───────────────────────────────────┐
-│                                             │
-▼                 ▼                           ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────────────┐
-│ Gmail Labels │  │   ChromaDB   │  │     SQLite       │
-│  (via MCP)   │  │  (vectors)   │  │   (metadata)     │
-└──────────────┘  └──────────────┘  └──────────────────┘
-          │                │                  │
-          └────────────────┴──────────────────┘
-                           │
-                           ▼
-          ┌────────────────────────────────┐
-          │   CLI (email-agent)            │
-          │   search / backfill / status   │
-          │   / reindex                    │
-          └────────────────────────────────┘
+              ┌──────────────────────┐
+              │    Gmail (via MCP)   │
+              └──────────┬───────────┘
+                         │ new emails
+                         ▼
+              ┌──────────────────────┐
+              │     Email Watcher    │
+              │   (polls every 60s)  │
+              └──────────┬───────────┘
+                         │
+                         ▼
+              ┌──────────────────────┐
+              │   Claude Haiku API   │
+              │   → email_type       │
+              │   → domain           │
+              │   → summary          │
+              │   → requires_reply   │
+              └──┬──────────┬────────┘
+    ┌────────────┘          └────────────────┐
+    │                 │                      │
+    ▼                 ▼                      ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│ Gmail Labels │  │   ChromaDB   │  │    SQLite    │
+│  (via MCP)   │  │  (vectors)   │  │  (metadata)  │
+│  write-only  │  └──────┬───────┘  └──────┬───────┘
+└──────────────┘         └─────────┬────────┘
+                                   ▼
+                    ┌──────────────────────────┐
+                    │     CLI (email-agent)    │
+                    │  search / backfill /     │
+                    │  status / reindex        │
+                    └──────────────────────────┘
 ```
 
 ## Prerequisites
