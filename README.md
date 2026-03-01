@@ -317,3 +317,67 @@ AI/
 
 > ⚠️ Run only one watcher instance at a time. Multiple instances will
 > conflict on the SQLite database.
+
+## CLI: On-Demand Commands
+
+All CLI commands can run while the watcher is running or independently.
+
+### Search
+
+Semantic natural-language search across your full email history:
+
+```bash
+uv run email-agent search "invoice from Acme last quarter"
+uv run email-agent search "flights to London"
+uv run email-agent search "performance review feedback"
+```
+
+Results are ranked by semantic similarity and show sender, subject, date,
+type/domain, and a one-line AI summary:
+
+```
+┌─────┬──────────────────────────┬───────────────────┬─────────┬──────────────────────────────────┐
+│  #  │ Subject                  │ From              │ Domain  │ Summary                          │
+├─────┼──────────────────────────┼───────────────────┼─────────┼──────────────────────────────────┤
+│  1  │ Q3 Invoice #1042         │ billing@acme.com  │ Finance │ Invoice for $4,200 due Oct 1     │
+│  2  │ Re: Q3 billing question  │ you@gmail.com     │ Work    │ Follow-up on outstanding invoice │
+└─────┴──────────────────────────┴───────────────────┴─────────┴──────────────────────────────────┘
+```
+
+### Status
+
+Show a summary of what is stored in the database and vector store:
+
+```bash
+uv run email-agent status
+```
+
+### Backfill
+
+Process historical emails and populate the search index:
+
+```bash
+# Process the last 30 days (recommended for first run)
+uv run email-agent backfill --days 30
+
+# Process the last 90 days
+uv run email-agent backfill --days 90
+```
+
+Backfill submits all new emails as a single Anthropic Batches API batch —
+roughly 50% cheaper than processing them one at a time. A live spinner shows
+progress while the batch runs.
+
+> **Already-processed emails are skipped automatically.** It is safe to run
+> backfill multiple times — only genuinely new emails are sent to the API.
+
+### Reindex
+
+Rebuild the ChromaDB vector store from SQLite without making any API calls:
+
+```bash
+uv run email-agent reindex
+```
+
+Run this after deleting `data/chroma/` or after upgrading from an older
+version of the agent that used a different distance metric.
