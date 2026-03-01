@@ -39,6 +39,7 @@ class EmailDatabase:
         self._conn = sqlite3.connect(str(self._path))
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA foreign_keys=ON")
         self._create_tables()
 
     def close(self) -> None:
@@ -125,6 +126,21 @@ class EmailDatabase:
                  AND processed_at >= datetime('now', ?)
                ORDER BY processed_at DESC""",
             (f"-{hours} hours",),
+        ).fetchall()
+        result = []
+        for row in rows:
+            d = dict(row)
+            d["requires_reply"] = bool(d["requires_reply"])
+            result.append(EmailRow(**d))
+        return result
+
+    def get_all_emails(self) -> list[EmailRow]:
+        """Return every email row, ordered by processed_at ascending."""
+        rows = self._conn.execute(
+            """SELECT id, thread_id, sender, subject, snippet, body, date,
+                      email_type, domain, summary, requires_reply,
+                      deadline, entities, processed_at
+               FROM emails ORDER BY processed_at""",
         ).fetchall()
         result = []
         for row in rows:

@@ -57,6 +57,7 @@ class EmailVectorStore:
         self._collection = self._client.get_or_create_collection(
             name=collection_name,
             embedding_function=ef,  # type: ignore[arg-type]
+            metadata={"hnsw:space": "cosine"},
         )
 
     def close(self) -> None:

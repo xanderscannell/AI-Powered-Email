@@ -18,13 +18,18 @@ from rich.table import Table
 if TYPE_CHECKING:
     from src.cli.query import QueryEngine
 
+import json
+
 from src.mcp.gmail_client import MCPError, gmail_client
+from src.mcp.types import RawEmail
 from src.processing.analyzer import (
     AnalysisProcessor,
     EmailAnalyzer,
     build_batch_request,
     parse_analysis_from_message,
 )
+from src.processing.types import Domain, EmailAnalysis, EmailType
+from src.storage.models import EmailRow
 
 logger = logging.getLogger(__name__)
 console = Console(width=200)
@@ -296,3 +301,62 @@ async def _briefing_async(engine: QueryEngine, output_override: str | None) -> N
 
     generator = BriefingGenerator(engine, config)
     await generator.generate()
+
+
+# ── reindex ──────────────────────────────────────────────────────────────────
+
+
+def _row_to_raw_email(row: EmailRow) -> RawEmail:
+    return RawEmail(
+        id=row.id,
+        thread_id=row.thread_id,
+        sender=row.sender,
+        subject=row.subject,
+        snippet=row.snippet,
+        body=row.body,
+        date=row.date,
+    )
+
+
+def _row_to_analysis(row: EmailRow) -> EmailAnalysis:
+    return EmailAnalysis(
+        email_id=row.id,
+        email_type=EmailType(row.email_type),
+        domain=Domain(row.domain) if row.domain else None,
+        entities=json.loads(row.entities),
+        summary=row.summary,
+        requires_reply=row.requires_reply,
+        deadline=row.deadline,
+    )
+
+
+@click.command()
+@click.pass_obj
+def reindex(engine: QueryEngine) -> None:
+    """Re-populate the vector store from emails already in the database.
+
+    Reads every email from SQLite and re-embeds it into ChromaDB.
+    No API calls — use this after deleting data/chroma to rebuild the index.
+    """
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
+
+    rows = engine.db.get_all_emails()
+    if not rows:
+        console.print("[yellow]No emails in database to reindex.[/yellow]")
+        return
+
+    console.print(f"Reindexing [bold]{len(rows)}[/bold] emails from database into vector store...")
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Embedding...", total=len(rows))
+        for row in rows:
+            engine.vector_store.upsert(_row_to_raw_email(row), _row_to_analysis(row))
+            progress.advance(task)
+
+    console.print(f"[green]Done.[/green] {len(rows)} emails indexed.")
