@@ -381,3 +381,72 @@ uv run email-agent reindex
 
 Run this after deleting `data/chroma/` or after upgrading from an older
 version of the agent that used a different distance metric.
+
+## Troubleshooting
+
+### OAuth flow hangs or "Authentication successful" never appears
+
+The OAuth flow opens a local callback server on port 18741 (configurable).
+If something else is using that port, set a different one:
+
+```bash
+WORKSPACE_MCP_PORT=19000 uv run python -m src
+```
+
+### "This app isn't verified" warning in the browser
+
+Expected for personal OAuth apps. Click **Advanced → Go to Email Agent (unsafe)**
+to proceed. Your credentials only access your own Gmail account.
+
+### MCP server fails to connect on startup
+
+`workspace-mcp` binds an internal port on startup. If a previous run crashed
+without releasing it, the next startup may fail. The agent retries up to 5
+times automatically (3-second delay between attempts). If it still fails,
+wait about 2 minutes for the OS to release the port (common on Windows due
+to TIME_WAIT), then try again.
+
+### Search returns 0 results or all similarity scores show as 0.00
+
+Your `data/chroma/` directory may have been created with an older version of
+the agent that used L2 distance instead of cosine. Delete it and reindex:
+
+```bash
+rm -rf data/chroma
+uv run email-agent reindex
+```
+
+### Backfill completes but no labels appear in Gmail
+
+1. Confirm `USER_GOOGLE_EMAIL` in `.env` exactly matches the account you
+   authorized in the OAuth flow.
+2. The OAuth token may have expired if you did not publish the app (Step 2.3).
+   Delete the cached token and re-authorize:
+   ```bash
+   rm -rf ~/.workspace-mcp/
+   uv run email-agent backfill --days 1
+   ```
+   This triggers a fresh OAuth flow in the browser.
+
+### SQLite database is locked
+
+Only one agent process should run at a time. Find and kill any orphaned
+instances:
+
+```bash
+# macOS / Linux
+pkill -f "python -m src"
+
+# Windows (PowerShell)
+Get-Process python | Where-Object { $_.CommandLine -like "*src*" } | Stop-Process
+```
+
+### Unicode errors in logs (Windows)
+
+The agent sets `PYTHONUTF8=1` automatically inside the `workspace-mcp`
+subprocess. If you see encoding errors in your own terminal output, add
+this to your `.env`:
+
+```bash
+PYTHONUTF8=1
+```
