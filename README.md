@@ -33,14 +33,14 @@ search and daily briefings. Everything runs on your machine — no cloud storage
               │   → domain           │
               │   → summary          │
               │   → requires_reply   │
-              └──┬──────────┬────────┘
-    ┌────────────┘          └────────────────┐
+              └──┬────┬─────┬────────┘
+    ┌────────────┘    |     └────────────────┐
     │                 │                      │
     ▼                 ▼                      ▼
 ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
 │ Gmail Labels │  │   ChromaDB   │  │    SQLite    │
 │  (via MCP)   │  │  (vectors)   │  │  (metadata)  │
-│  write-only  │  └──────┬───────┘  └──────┬───────┘
+│  write-only  │  └──────┬───────┘  └───────┬──────┘
 └──────────────┘         └─────────┬────────┘
                                    ▼
                     ┌──────────────────────────┐
