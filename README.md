@@ -73,3 +73,77 @@ search and daily briefings. Everything runs on your machine — no cloud storage
 > **Cost**: The agent uses Claude Haiku for per-email analysis (~$0.001 per
 > email) and the Anthropic Batches API for backfill (~50% cheaper than
 > real-time calls). At typical personal inbox volume, expect a few cents per day.
+
+## Step 2: Set Up Google OAuth Credentials
+
+The agent uses [`workspace-mcp`](https://github.com/pydantic/workspace-mcp)
+to read and label your Gmail. It needs OAuth credentials from Google Cloud
+Console so it can request permission to access your account.
+
+### 2.1 Create a Google Cloud Project
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com).
+2. Click the **project dropdown** at the top of the page → **New Project**.
+3. Enter a name (e.g. `email-agent`) and click **Create**.
+4. Wait a moment, then confirm the new project is selected in the dropdown
+   before continuing.
+
+### 2.2 Enable the Gmail API
+
+1. In the left sidebar, go to **APIs & Services → Library**.
+2. Search for **Gmail API** and click it.
+3. Click **Enable**.
+
+> **Screenshot callout**: the Enable button turns to "Manage" once the API
+> is active — that confirms it worked.
+
+### 2.3 Configure the OAuth Consent Screen
+
+> You only need to do this once. Google requires a consent screen before
+> you can create OAuth credentials.
+
+1. Go to **APIs & Services → OAuth consent screen**.
+2. Select **External** and click **Create**.
+3. Fill in the required fields:
+   - **App name**: `Email Agent` (anything descriptive works)
+   - **User support email**: your Gmail address
+   - **Developer contact email**: your Gmail address
+4. Click **Save and Continue** through the **Scopes** page (no changes needed).
+5. On the **Test Users** page, click **Save and Continue** (no changes needed).
+6. On the **Summary** page, click **Back to Dashboard**.
+7. Click **Publish App** → **Confirm**.
+
+> ⚠️ **Important**: publishing the app prevents the OAuth token from
+> expiring after 7 days. If you skip this step, you will need to re-authorize
+> every week.
+
+### 2.4 Create OAuth Credentials
+
+1. Go to **APIs & Services → Credentials**.
+2. Click **+ Create Credentials → OAuth client ID**.
+3. For **Application type**, select **Desktop app**.
+4. Give it a name (e.g. `email-agent-desktop`) and click **Create**.
+5. A dialog shows your credentials:
+   - **Client ID** — ends in `.apps.googleusercontent.com`
+   - **Client Secret** — a short alphanumeric string
+6. Copy both values and click **OK**. You will paste them into `.env` in Step 3.
+
+> **Screenshot callout**: the dialog that shows the Client ID and Client
+> Secret appears immediately after clicking Create. If you close it, you can
+> retrieve the values by clicking the pencil (edit) icon next to the
+> credential on the Credentials page.
+
+### 2.5 First-Time OAuth Authorization
+
+The first time the agent starts, `workspace-mcp` opens a browser window to
+request Gmail access. This only happens once — the token is cached locally
+afterward.
+
+> **Screenshot callout**: expect a browser tab titled "Sign in with Google".
+> Select your account, then click **Allow** on the permissions screen.
+> You should see "Authentication successful" in the browser tab when done.
+
+> ⚠️ If you see **"This app isn't verified"**, click
+> **Advanced → Go to Email Agent (unsafe)**. This warning is expected for
+> personal OAuth apps that have not gone through Google's formal verification
+> process. Your credentials only access your own account.
