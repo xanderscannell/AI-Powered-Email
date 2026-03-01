@@ -22,3 +22,32 @@ Scheduling: cron or APScheduler for daily briefings
 Interface: CLI, or a simple local web UI if you want something visual
 
 The beauty of this setup is that it starts simple — you can get the basic MCP + Haiku labeling loop working in an afternoon — and every other piece (vector search, briefings, draft generation) layers on incrementally without rearchitecting anything.
+
+# New ideas
+
+Bulk Declutter (the big win)
+
+Auto-unsubscribe pipeline — detect newsletters/marketing emails, extract the unsubscribe link, and either auto-click it or queue them for one-click batch approval. Years of accumulated subscriptions gone in an afternoon.
+Sender reputation scoring — after processing your history, rank every sender by how often their emails led to any action from you. The bottom 80% are probably clutter you never needed.
+Safe-to-delete buckets — automatically identify emails that are purely transactional and past their useful life (shipping notifications from 2019, OTP codes, event invites that already passed) and batch-archive or delete them.
+
+Making Sense of the Chaos
+
+Auto-categorize by life domain — Finance, Health, Travel, Shopping, Family, Work, Government/Legal, Subscriptions, etc. Not Gmail's generic tabs, but your actual life inferred from content.
+Highlight emails you should have replied to and didn't — years of dropped threads you may have forgotten about.
+Find all accounts you have — synthesize a list of every service/website you've ever signed up for based on welcome emails, receipts, and password resets. Useful for knowing what to delete or secure.
+
+Surfacing Things That Still Matter
+
+Active subscriptions and recurring charges — pull every billing confirmation and map out what you're apparently still paying for.
+Credentials and account info buried in old emails — flag emails containing account numbers, policy numbers, reference numbers so you can actually find them when needed.
+Warranties and receipts — extract purchase dates, products, and retailers into a simple list so you know what's still under warranty.
+Important people you've lost touch with — find real human emails (not automated) from people you haven't heard from in years.
+
+Ongoing Maintenance (once it's clean)
+
+New sender classification on arrival — the moment a new sender appears, immediately decide if it's a human, a service you use, or marketing, and route accordingly before it contributes to future chaos.
+Weekly clutter report — "47 emails arrived, 31 were auto-archived, here's what's left."
+
+
+The single highest-value thing for a chaotic personal inbox is probably the sender scoring + safe-to-delete identification — most of those thousands of emails are from senders whose entire history with you is noise. Identifying and purging those in bulk would cut the problem down dramatically before doing anything else.
