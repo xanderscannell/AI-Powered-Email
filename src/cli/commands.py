@@ -7,6 +7,7 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
+import anthropic
 import click
 from anthropic import AsyncAnthropic
 from rich import box
@@ -18,7 +19,12 @@ if TYPE_CHECKING:
     from src.cli.query import QueryEngine
 
 from src.mcp.gmail_client import MCPError, gmail_client
-from src.processing.analyzer import AnalysisProcessor, EmailAnalyzer
+from src.processing.analyzer import (
+    AnalysisProcessor,
+    EmailAnalyzer,
+    build_batch_request,
+    parse_analysis_from_message,
+)
 
 logger = logging.getLogger(__name__)
 console = Console(width=200)
@@ -129,22 +135,36 @@ async def _status_async(engine: QueryEngine, topic: str, limit: int) -> None:
 
 @click.command()
 @click.option("--days", required=True, type=int, help="Days of history to process.")
-@click.option(
-    "--rate-limit",
-    default=1.0,
-    show_default=True,
-    help="Max Haiku API calls per second.",
-)
 @click.pass_obj
-def backfill(engine: QueryEngine, days: int, rate_limit: float) -> None:
-    """Process historical emails from the last N days."""
-    asyncio.run(_backfill_async(engine, days, rate_limit))
+def backfill(engine: QueryEngine, days: int) -> None:
+    """Process historical emails from the last N days via the Anthropic Batches API."""
+    asyncio.run(_backfill_async(engine, days))
 
 
-async def _backfill_async(engine: QueryEngine, days: int, rate_limit: float) -> None:
+def _create_batch(requests: list, api_key: str) -> str:
+    """Synchronous: submit a batch to Anthropic. Returns the batch ID."""
+    client = anthropic.Anthropic(api_key=api_key)
+    batch = client.messages.batches.create(requests=requests)
+    return batch.id
+
+
+def _retrieve_batch(batch_id: str, api_key: str) -> object:
+    """Synchronous: retrieve current batch status."""
+    client = anthropic.Anthropic(api_key=api_key)
+    return client.messages.batches.retrieve(batch_id)
+
+
+def _collect_batch_results(batch_id: str, api_key: str) -> list:
+    """Synchronous: stream all batch results into a list."""
+    client = anthropic.Anthropic(api_key=api_key)
+    return list(client.messages.batches.results(batch_id))
+
+
+async def _backfill_async(engine: QueryEngine, days: int) -> None:
     from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
     stored_ids = engine.get_stored_ids_since(days)
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
 
     try:
         async with gmail_client() as gmail:
@@ -162,7 +182,50 @@ async def _backfill_async(engine: QueryEngine, days: int, rate_limit: float) -> 
                 console.print("[green]Nothing to do.[/green]")
                 return
 
-            delay = 1.0 / rate_limit
+            # ── Submit batch ────────────────────────────────────────────────
+            requests = [build_batch_request(e) for e in new_emails]
+            console.print(
+                f"Submitting batch of [bold]{len(new_emails)}[/bold] email(s) "
+                f"to Anthropic (50% off vs real-time)..."
+            )
+            batch_id = await asyncio.to_thread(_create_batch, requests, api_key)
+            console.print(f"  Batch ID: [dim]{batch_id}[/dim]")
+
+            # ── Poll with live status ────────────────────────────────────────
+            with console.status("Waiting for Anthropic batch to complete...") as status:
+                while True:
+                    batch = await asyncio.to_thread(_retrieve_batch, batch_id, api_key)
+                    if batch.processing_status == "ended":
+                        break
+                    c = batch.request_counts
+                    status.update(
+                        f"Processing batch — "
+                        f"[green]{c.succeeded} done[/green], "
+                        f"{c.processing} in progress"
+                        + (f", [red]{c.errored} errored[/red]" if c.errored else "")
+                        + "..."
+                    )
+                    await asyncio.sleep(5)
+
+            counts = batch.request_counts
+            console.print(
+                f"Batch complete — "
+                f"[green]{counts.succeeded} succeeded[/green]"
+                + (f", [red]{counts.errored} errored[/red]" if counts.errored else "")
+                + "."
+            )
+
+            # ── Collect results ─────────────────────────────────────────────
+            results = await asyncio.to_thread(_collect_batch_results, batch_id, api_key)
+
+            # ── Fan out: labels + storage ───────────────────────────────────
+            email_map = {e.id: e for e in new_emails}
+            processor = AnalysisProcessor(
+                analyzer=EmailAnalyzer(),
+                gmail=gmail,
+                vector_store=engine.vector_store,
+                db=engine.db,
+            )
             processed = 0
             failed = 0
 
@@ -173,25 +236,27 @@ async def _backfill_async(engine: QueryEngine, days: int, rate_limit: float) -> 
                 TaskProgressColumn(),
                 console=console,
             ) as progress:
-                task = progress.add_task("Processing...", total=len(new_emails))
-                analyzer = EmailAnalyzer()
-                processor = AnalysisProcessor(
-                    analyzer=analyzer,
-                    gmail=gmail,
-                    vector_store=engine.vector_store,
-                    db=engine.db,
-                )
-                for i, email in enumerate(new_emails):
-                    try:
-                        await processor.process(email)
-                        processed += 1
-                    except Exception as exc:  # noqa: BLE001
-                        logger.error("Backfill: failed on email %s: %s", email.id, exc)
+                task = progress.add_task("Applying labels & storing...", total=len(results))
+                for result in results:
+                    email = email_map.get(result.custom_id)
+                    if result.result.type == "succeeded" and email is not None:
+                        try:
+                            analysis = parse_analysis_from_message(
+                                result.custom_id, result.result.message
+                            )
+                            await processor.process_with_analysis(email, analysis)
+                            processed += 1
+                        except Exception as exc:  # noqa: BLE001
+                            logger.error("Backfill: fan-out failed for %s: %s", result.custom_id, exc)
+                            failed += 1
+                    else:
+                        logger.warning(
+                            "Backfill: batch item %s — %s",
+                            result.custom_id,
+                            result.result.type,
+                        )
                         failed += 1
-                    finally:
-                        progress.advance(task)
-                        if i < len(new_emails) - 1:
-                            await asyncio.sleep(delay)
+                    progress.advance(task)
 
             console.print(
                 f"[green]Done.[/green] {processed} processed"

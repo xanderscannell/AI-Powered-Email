@@ -19,9 +19,11 @@ def cli(ctx: click.Context) -> None:
     """AI-powered email agent — search, status, and backfill commands."""
     load_dotenv(override=True)
     logging.basicConfig(
-        level=logging.WARNING,  # keep CLI output clean; errors still surface
+        level=logging.WARNING,  # keep third-party noise suppressed
         format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
     )
+    # Show INFO logs from this project's own modules (token usage, analysis results, etc.)
+    logging.getLogger("src").setLevel(logging.INFO)
     ctx.ensure_object(dict)
     db = EmailDatabase(db_path=Path("data/email_agent.db"))
     vector_store = EmailVectorStore(persist_dir=Path("data/chroma"))

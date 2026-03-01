@@ -7,7 +7,9 @@ import os
 from typing import TYPE_CHECKING
 
 from anthropic import AsyncAnthropic
-from anthropic.types import ToolUseBlock
+from anthropic.types import Message, ToolUseBlock
+from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
+from anthropic.types.messages.batch_create_params import Request as BatchRequest
 
 from src.mcp.gmail_client import GmailClient
 from src.mcp.types import RawEmail
@@ -46,6 +48,9 @@ class EmailAnalyzer:
     Uses Anthropic's tool_use with a forced tool_choice so the response is
     always machine-readable — no JSON parsing, no markdown fences.
 
+    Used by the live watcher for real-time processing.  Backfill uses the
+    Batches API instead (see build_batch_request / parse_analysis_from_message).
+
     Usage::
 
         analyzer = EmailAnalyzer()
@@ -71,15 +76,54 @@ class EmailAnalyzer:
             messages=build_messages(email),  # type: ignore[arg-type]
         )
 
-        for block in response.content:
-            if isinstance(block, ToolUseBlock) and block.name == "record_email_analysis":
-                data = block.input
-                return _parse_analysis(email.id, data)  # type: ignore[arg-type]
-
-        raise AnalysisError(
-            f"Haiku did not return a record_email_analysis tool call "
-            f"for email {email.id!r} (stop_reason={response.stop_reason!r})"
+        u = response.usage
+        logger.info(
+            "email=%s tokens: input=%d output=%d",
+            email.id,
+            u.input_tokens,
+            u.output_tokens,
         )
+
+        return parse_analysis_from_message(email.id, response)
+
+
+# ── Batch helpers ───────────────────────────────────────────────────────────────
+
+
+def build_batch_request(email: RawEmail) -> BatchRequest:
+    """Build a single Anthropic Batches API request for one email.
+
+    The custom_id is set to the Gmail message ID so results can be matched
+    back to the original email after the batch completes.
+    """
+    return BatchRequest(
+        custom_id=email.id,
+        params=MessageCreateParamsNonStreaming(
+            model=_MODEL,
+            max_tokens=_MAX_TOKENS,
+            tools=[ANALYSIS_TOOL],  # type: ignore[list-item]
+            tool_choice={"type": "tool", "name": "record_email_analysis"},
+            messages=build_messages(email),  # type: ignore[arg-type]
+        ),
+    )
+
+
+def parse_analysis_from_message(email_id: str, message: Message) -> EmailAnalysis:
+    """Extract and parse an EmailAnalysis from a completed Anthropic Message.
+
+    Works for both real-time (EmailAnalyzer.analyze) and batch results.
+
+    Raises:
+        AnalysisError: if the message contains no record_email_analysis tool call.
+    """
+    for block in message.content:
+        if isinstance(block, ToolUseBlock) and block.name == "record_email_analysis":
+            return _parse_analysis(email_id, block.input)  # type: ignore[arg-type]
+
+    raise AnalysisError(
+        f"Haiku did not return a record_email_analysis tool call "
+        f"for email {email_id!r} (stop_reason={message.stop_reason!r})"
+    )
 
 
 def _parse_analysis(email_id: str, data: dict[str, object]) -> EmailAnalysis:
@@ -133,6 +177,14 @@ class AnalysisProcessor:
             logger.error("Analysis failed for email %s: %s", email.id, exc)
             return
 
+        await self.process_with_analysis(email, analysis)
+
+    async def process_with_analysis(self, email: RawEmail, analysis: EmailAnalysis) -> None:
+        """Fan out a pre-computed analysis to labels and storage. Never raises.
+
+        Used by the batch backfill path where analysis comes from the Batches
+        API rather than a real-time Haiku call.
+        """
         await self._apply_labels(email.id, analysis)
         await self._write_storage(email, analysis)
 

@@ -156,17 +156,34 @@ class TestBackfillCommand:
         mock_gmail.__aenter__ = MagicMock(return_value=_async_return(mock_gmail))
         mock_gmail.__aexit__ = MagicMock(return_value=_async_return(None))
 
-        mock_processor = MagicMock()
-        mock_processor.process = MagicMock(return_value=_async_return(None))
+        # Mock the single successful batch result for msg_3 (msg_1 is already stored)
+        mock_batch_result = MagicMock()
+        mock_batch_result.custom_id = "msg_3"
+        mock_batch_result.result.type = "succeeded"
+        mock_batch_result.result.message = MagicMock()
 
-        with patch("src.cli.commands.gmail_client", return_value=mock_gmail), patch(
-            "src.cli.commands.EmailAnalyzer"
-        ), patch("src.cli.commands.AnalysisProcessor", return_value=mock_processor):
+        mock_batch_status = MagicMock()
+        mock_batch_status.processing_status = "ended"
+        mock_batch_status.request_counts.succeeded = 1
+        mock_batch_status.request_counts.errored = 0
+
+        mock_processor = MagicMock()
+        mock_processor.process_with_analysis = MagicMock(return_value=_async_return(None))
+
+        with (
+            patch("src.cli.commands.gmail_client", return_value=mock_gmail),
+            patch("src.cli.commands.EmailAnalyzer"),
+            patch("src.cli.commands.AnalysisProcessor", return_value=mock_processor),
+            patch("src.cli.commands._create_batch", return_value="batch_123"),
+            patch("src.cli.commands._retrieve_batch", return_value=mock_batch_status),
+            patch("src.cli.commands._collect_batch_results", return_value=[mock_batch_result]),
+            patch("src.cli.commands.parse_analysis_from_message", return_value=MagicMock()),
+        ):
             result = _invoke(engine, "backfill", "--days", "30")
 
         assert result.exit_code == 0
-        # processor.process should only be called once (for msg_3, not msg_1)
-        assert mock_processor.process.call_count == 1
+        # process_with_analysis should only be called once (for msg_3, not msg_1)
+        assert mock_processor.process_with_analysis.call_count == 1
 
     def test_requires_days_option(self) -> None:
         engine = MagicMock()
