@@ -173,6 +173,7 @@ async def _backfill_async(engine: QueryEngine, days: int) -> None:
 
     try:
         async with gmail_client() as gmail:
+            await gmail.ensure_ai_labels()
             console.print(f"Fetching all emails from the last {days} day(s)...")
             all_emails = await gmail.get_emails_since(days)
 

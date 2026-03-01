@@ -152,6 +152,7 @@ class TestBackfillCommand:
         ]
 
         mock_gmail = MagicMock()
+        mock_gmail.ensure_ai_labels = MagicMock(return_value=_async_return(None))
         mock_gmail.get_emails_since = MagicMock(return_value=_async_return(all_emails))
         mock_gmail.__aenter__ = MagicMock(return_value=_async_return(mock_gmail))
         mock_gmail.__aexit__ = MagicMock(return_value=_async_return(None))
@@ -185,6 +186,52 @@ class TestBackfillCommand:
         # process_with_analysis should only be called once (for msg_3, not msg_1)
         assert mock_processor.process_with_analysis.call_count == 1
 
+    def test_ensure_ai_labels_called_before_processing(self) -> None:
+        """ensure_ai_labels must be called so the label hierarchy exists on first run."""
+        engine = MagicMock()
+        engine.get_stored_ids_since.return_value = set()
+        engine.vector_store = MagicMock()
+        engine.db = MagicMock()
+
+        from src.mcp.types import RawEmail
+
+        all_emails = [
+            RawEmail(id="msg_1", thread_id="t1", sender="a@b.com", subject="New", snippet="new", body="body"),
+        ]
+
+        mock_gmail = MagicMock()
+        mock_gmail.ensure_ai_labels = MagicMock(return_value=_async_return(None))
+        mock_gmail.get_emails_since = MagicMock(return_value=_async_return(all_emails))
+        mock_gmail.__aenter__ = MagicMock(return_value=_async_return(mock_gmail))
+        mock_gmail.__aexit__ = MagicMock(return_value=_async_return(None))
+
+        mock_batch_status = MagicMock()
+        mock_batch_status.processing_status = "ended"
+        mock_batch_status.request_counts.succeeded = 1
+        mock_batch_status.request_counts.errored = 0
+
+        mock_batch_result = MagicMock()
+        mock_batch_result.custom_id = "msg_1"
+        mock_batch_result.result.type = "succeeded"
+        mock_batch_result.result.message = MagicMock()
+
+        mock_processor = MagicMock()
+        mock_processor.process_with_analysis = MagicMock(return_value=_async_return(None))
+
+        with (
+            patch("src.cli.commands.gmail_client", return_value=mock_gmail),
+            patch("src.cli.commands.EmailAnalyzer"),
+            patch("src.cli.commands.AnalysisProcessor", return_value=mock_processor),
+            patch("src.cli.commands._create_batch", return_value="batch_abc"),
+            patch("src.cli.commands._retrieve_batch", return_value=mock_batch_status),
+            patch("src.cli.commands._collect_batch_results", return_value=[mock_batch_result]),
+            patch("src.cli.commands.parse_analysis_from_message", return_value=MagicMock()),
+        ):
+            result = _invoke(engine, "backfill", "--days", "7")
+
+        assert result.exit_code == 0
+        mock_gmail.ensure_ai_labels.assert_called_once()
+
     def test_requires_days_option(self) -> None:
         engine = MagicMock()
         runner = CliRunner()
@@ -206,6 +253,7 @@ class TestBackfillCommand:
         ]
 
         mock_gmail = MagicMock()
+        mock_gmail.ensure_ai_labels = MagicMock(return_value=_async_return(None))
         mock_gmail.get_emails_since = MagicMock(return_value=_async_return(all_emails))
         mock_gmail.__aenter__ = MagicMock(return_value=_async_return(mock_gmail))
         mock_gmail.__aexit__ = MagicMock(return_value=_async_return(None))
