@@ -94,6 +94,8 @@ Console so it can request permission to access your account.
 2. Search for **Gmail API** and click it.
 3. Click **Enable**.
 
+<img width="633" height="387" alt="Screenshot 2026-03-01 135004" src="https://github.com/user-attachments/assets/330cb41f-6bb6-4ca1-aabc-eaaefd4cff5b" />
+
 > **Screenshot callout**: the Enable button turns to "Manage" once the API
 > is active — that confirms it worked.
 
@@ -127,6 +129,9 @@ Console so it can request permission to access your account.
    - **Client ID** — ends in `.apps.googleusercontent.com`
    - **Client Secret** — a short alphanumeric string
 6. Copy both values and click **OK**. You will paste them into `.env` in Step 3.
+
+<img width="817" height="451" alt="Screenshot 2026-03-01 135238" src="https://github.com/user-attachments/assets/d2e37ff0-78ed-4174-832a-79e4a2e4e106" />
+<img width="528" height="624" alt="Screenshot 2026-03-01 135620" src="https://github.com/user-attachments/assets/770cff16-2afa-44e7-a006-ce2f193b7668" />
 
 > **Screenshot callout**: the dialog that shows the Client ID and Client
 > Secret appears immediately after clicking Create. If you close it, you can
