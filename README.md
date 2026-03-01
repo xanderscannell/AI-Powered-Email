@@ -94,10 +94,10 @@ Console so it can request permission to access your account.
 2. Search for **Gmail API** and click it.
 3. Click **Enable**.
 
-<img width="633" height="387" alt="Screenshot 2026-03-01 135004" src="https://github.com/user-attachments/assets/330cb41f-6bb6-4ca1-aabc-eaaefd4cff5b" />
-
-> **Screenshot callout**: the Enable button turns to "Manage" once the API
-> is active — that confirms it worked.
+<p align="center">
+  <img width="600" alt="Gmail API page showing the Enable button" src="https://github.com/user-attachments/assets/330cb41f-6bb6-4ca1-aabc-eaaefd4cff5b" />
+  <br><sub>The Enable button changes to "Manage" once the API is active — that confirms it worked.</sub>
+</p>
 
 ### 2.3 Configure the OAuth Consent Screen
 
@@ -130,13 +130,15 @@ Console so it can request permission to access your account.
    - **Client Secret** — a short alphanumeric string
 6. Copy both values and click **OK**. You will paste them into `.env` in Step 3.
 
-<img width="817" height="451" alt="Screenshot 2026-03-01 135238" src="https://github.com/user-attachments/assets/d2e37ff0-78ed-4174-832a-79e4a2e4e106" />
-<img width="528" height="624" alt="Screenshot 2026-03-01 135620" src="https://github.com/user-attachments/assets/770cff16-2afa-44e7-a006-ce2f193b7668" />
+<p align="center">
+  <img width="700" alt="Credentials page showing the newly created OAuth client" src="https://github.com/user-attachments/assets/d2e37ff0-78ed-4174-832a-79e4a2e4e106" />
+  <br><sub>The OAuth client entry on the Credentials page. Click the pencil icon at any time to retrieve your Client ID and Secret.</sub>
+</p>
 
-> **Screenshot callout**: the dialog that shows the Client ID and Client
-> Secret appears immediately after clicking Create. If you close it, you can
-> retrieve the values by clicking the pencil (edit) icon next to the
-> credential on the Credentials page.
+<p align="center">
+  <img width="480" alt="Dialog showing the OAuth Client ID and Client Secret" src="https://github.com/user-attachments/assets/770cff16-2afa-44e7-a006-ce2f193b7668" />
+  <br><sub>This dialog appears immediately after clicking Create — copy both values now, it won't be shown again.</sub>
+</p>
 
 ### 2.5 First-Time OAuth Authorization
 
