@@ -453,6 +453,7 @@ class TestSendEmail:
                 "to": "me@example.com",
                 "subject": "Morning Briefing \u2014 2026-02-27",
                 "body": "# Briefing\n\nNo urgent items.",
+                "body_format": "plain",
                 "user_google_email": "test@example.com",
             },
         )

@@ -163,13 +163,17 @@ class BriefingGenerator:
         logger.info("Briefing written to %s", path)
 
     async def _send_email(self, text: str, today: str) -> None:
-        """Send briefing via Gmail MCP to self."""
+        """Send briefing via Gmail MCP to self as HTML."""
+        import markdown as md
+
+        html_body = md.markdown(text, extensions=["nl2br"])
         try:
             async with gmail_client() as gmail:
                 await gmail.send_email(
                     to=self._config.email_recipient,
                     subject=f"Morning Briefing \u2014 {today}",
-                    body=text,
+                    body=html_body,
+                    body_format="html",
                 )
             logger.info("Briefing email sent to %s", self._config.email_recipient)
         except Exception as exc:  # noqa: BLE001

@@ -265,19 +265,25 @@ async def _amain() -> None:
     except (NotImplementedError, AttributeError, ValueError):
         pass
 
+    briefing_enabled = os.environ.get("BRIEFING_ENABLED", "true").lower() == "true"
+
     # Start the scheduler AFTER the watcher establishes its first MCP connection.
     # On Windows (ProactorEventLoop), AsyncIOScheduler's background tasks interfere
     # with subprocess spawning if started beforehand, causing "Connection closed"
     # during the MCP handshake.
-    scheduler = create_briefing_scheduler(engine, output_config)
+    if briefing_enabled:
+        scheduler = create_briefing_scheduler(engine, output_config)
 
-    async def on_first_connect() -> None:
-        scheduler.start()
+        async def on_first_connect() -> None:
+            scheduler.start()
 
-    watcher.on_first_connect = on_first_connect  # type: ignore[attr-defined]
+        watcher.on_first_connect = on_first_connect  # type: ignore[attr-defined]
+    else:
+        logger.info("Daily briefing disabled (BRIEFING_ENABLED=false)")
+        scheduler = None
 
     try:
         await watcher.run()
     finally:
-        if scheduler.running:
+        if scheduler is not None and scheduler.running:
             scheduler.shutdown(wait=False)

@@ -33,7 +33,9 @@ def make_gmail_mock(*email_batches: list[RawEmail]) -> MagicMock:
     """Mock GmailClient whose get_unread_emails() returns successive batches."""
     gmail = MagicMock()
     gmail.ensure_ai_labels = AsyncMock()
-    gmail.get_unread_email_ids = AsyncMock(return_value=[])
+    # Derive IDs from each batch so _poll's lightweight pre-check doesn't short-circuit.
+    id_batches = [[e.id for e in batch] for batch in email_batches] or [[]]
+    gmail.get_unread_email_ids = AsyncMock(side_effect=id_batches)
     gmail.get_unread_emails = AsyncMock(side_effect=list(email_batches))
     return gmail
 
@@ -164,7 +166,10 @@ class TestSeedProcessedIds:
         new_arrival = make_email("new_1")
 
         gmail = MagicMock()
-        gmail.get_unread_email_ids = AsyncMock(return_value=["old_1", "old_2"])
+        # First call (seed): only old IDs exist. Second call (poll): new_1 has arrived.
+        gmail.get_unread_email_ids = AsyncMock(
+            side_effect=[["old_1", "old_2"], ["old_1", "old_2", "new_1"]]
+        )
         gmail.get_unread_emails = AsyncMock(return_value=[*pre_existing, new_arrival])
 
         await watcher._seed_processed_ids(gmail)
@@ -266,10 +271,19 @@ class TestSchedulerWiring:
         monkeypatch.setattr("src.storage.vector_store.EmailVectorStore", MagicMock())
         monkeypatch.setattr("src.processing.analyzer.EmailAnalyzer", MagicMock())
 
-        # Patch EmailWatcher to avoid actually connecting to Gmail
+        # Patch EmailWatcher to avoid actually connecting to Gmail.
+        # run() must invoke on_first_connect to simulate the first MCP connection.
         mock_watcher = MagicMock()
-        mock_watcher.run = AsyncMock()
         mock_watcher.stop = MagicMock()
+
+        async def _run_calls_on_first_connect() -> None:
+            cb = getattr(mock_watcher, "on_first_connect", None)
+            if cb is not None:
+                result = cb()
+                if asyncio.iscoroutine(result):
+                    await result
+
+        mock_watcher.run = AsyncMock(side_effect=_run_calls_on_first_connect)
 
         with patch(
             "src.briefing.scheduler.create_briefing_scheduler",
@@ -279,3 +293,24 @@ class TestSchedulerWiring:
 
         mock_scheduler.start.assert_called_once()
         mock_scheduler.shutdown.assert_called_once_with(wait=False)
+
+    async def test_scheduler_not_started_when_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_amain() must not create or start the scheduler when BRIEFING_ENABLED=false."""
+        import src.agent.watcher as watcher_mod
+
+        monkeypatch.setenv("BRIEFING_ENABLED", "false")
+        monkeypatch.setattr("src.storage.db.EmailDatabase", MagicMock())
+        monkeypatch.setattr("src.storage.vector_store.EmailVectorStore", MagicMock())
+        monkeypatch.setattr("src.processing.analyzer.EmailAnalyzer", MagicMock())
+
+        mock_watcher = MagicMock()
+        mock_watcher.run = AsyncMock()
+
+        with patch(
+            "src.briefing.scheduler.create_briefing_scheduler"
+        ) as mock_create, patch("src.agent.watcher.EmailWatcher", return_value=mock_watcher):
+            await watcher_mod._amain()
+
+        mock_create.assert_not_called()

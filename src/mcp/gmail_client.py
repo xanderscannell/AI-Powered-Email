@@ -229,10 +229,17 @@ class GmailClient:
             else:
                 logger.debug("Label already exists: %s", label_name)
 
-    async def send_email(self, to: str, subject: str, body: str) -> None:
+    async def send_email(
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        body_format: str = "plain",
+    ) -> None:
         """Send an email via Gmail MCP.
 
         Used by BriefingGenerator to deliver the daily briefing to self.
+        body_format: 'plain' or 'html' (passed directly to workspace-mcp).
         """
         await self._call(
             "send_gmail_message",
@@ -240,6 +247,7 @@ class GmailClient:
                 "to": to,
                 "subject": subject,
                 "body": body,
+                "body_format": body_format,
                 "user_google_email": self._user_email,
             },
         )

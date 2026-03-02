@@ -4,9 +4,9 @@
 
 ## Current Position
 
-**Phase**: Phase 6 complete — ready for Phase 5 (Briefing Generator)
+**Phase**: Phase 5 complete — all phases through 6 done
 **Subphase**: N/A
-**Progress**: 90% complete
+**Progress**: 95% complete
 
 ## Recently Completed
 
@@ -40,6 +40,10 @@
   - `PRAGMA foreign_keys=ON` now enforced
   - Test embeddings upgraded to `WordHashEmbeddingFunction` (bag-of-words hashing) for meaningful semantic ranking tests
   - 9 new tests in `TestSemanticRanking` and `TestScaleAndIntegrity`
+- **Phase 5 complete** (2026-03-02): Briefing Generator — was already fully implemented. Fixed dev env and all pre-existing test failures.
+  - `pyproject.toml`: migrated dev deps from `[project.optional-dependencies]` to `[dependency-groups]`; ran `uv pip install` to populate venv
+  - `tests/test_agent/test_watcher.py`: fixed `make_gmail_mock` to derive IDs from batches (ID pre-check optimization broke tests); fixed `test_seeded_ids_are_skipped_on_first_poll` to use `side_effect`; fixed `test_scheduler_started_in_amain` to simulate `on_first_connect` callback
+  - 252 tests passing, 0 failures (was 198 passing, 13+ pre-existing failures)
 - **Phase 6 complete** (2026-03-01): Claude Desktop MCP Server — 7 read-only tools over stdio.
   - `src/mcp/server.py` — FastMCP server with tools: search_emails, get_emails_needing_reply, get_pending_followups, get_open_deadlines, get_status, get_email, get_contact
   - `tests/test_mcp/test_server.py` — 31 tests, real tmp databases, no API calls
@@ -47,32 +51,27 @@
   - `email-agent-mcp` script entry point registered in pyproject.toml
   - MASTER_PLAN.md: Phase 6 inserted; old Phase 6 → 7, Phase 7 → 8
   - ARCHITECTURE.md: MCP server added as third consumer of the storage layer
-  - 198 tests passing total (31 pre-existing failures in watcher + briefing scheduler)
+  - 252 tests passing total, 0 failures (Phase 5 session fixed all pre-existing test failures)
 
 ## In Progress
 
-None — Phase 6 complete.
+None — Phase 5 complete.
 
 ## Next Up
 
-1. Phase 5: Briefing Generator
-   - `src/briefing/generator.py` — BriefingGenerator skeleton exists; finalize with new schema
-   - `src/briefing/scheduler.py` — APScheduler cron-based daily briefing runner
-   - `src/cli/commands.py` — add `email briefing` command (on-demand trigger)
-   - QueryEngine already has: `get_human_emails_needing_reply()`, `get_pending_follow_ups()`, `get_open_deadlines()`
-   - Output: rich terminal panel (same style as `email status`)
-   - Schedule config: `BRIEFING_TIME` env var (e.g. `"08:00"`)
+1. Phase 7: Web UI (optional) or Phase 8: Polish/packaging
+   - See MASTER_PLAN.md for full roadmap
 
 ## Active Files and Modules
 
 ```
 src/
-├── agent/          [status: done — watcher.py]
+├── agent/          [status: done — watcher.py (boots scheduler on first MCP connect)]
 ├── mcp/            [status: done — types.py, gmail_client.py, server.py (Phase 6)]
 ├── processing/     [status: done — types.py, prompts.py, analyzer.py]
 ├── storage/        [status: done — models.py, db.py, vector_store.py]
-├── briefing/       [status: skeleton exists — generator.py, scheduler.py]
-└── cli/            [status: done — query.py, main.py, commands.py (search/status/backfill/reindex)]
+├── briefing/       [status: done — generator.py, scheduler.py (Phase 5)]
+└── cli/            [status: done — query.py, main.py, commands.py (search/status/backfill/reindex/briefing)]
 ```
 
 ## Recent Decisions
