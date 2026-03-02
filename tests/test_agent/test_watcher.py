@@ -314,3 +314,9 @@ class TestSchedulerWiring:
             await watcher_mod._amain()
 
         mock_create.assert_not_called()
+
+
+def test_main_is_callable():
+    from src.agent.watcher import main
+
+    assert callable(main)

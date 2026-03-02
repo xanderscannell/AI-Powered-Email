@@ -287,3 +287,6 @@ async def _amain() -> None:
     finally:
         if scheduler is not None and scheduler.running:
             scheduler.shutdown(wait=False)
+
+if __name__ == "__main__":
+    main()
