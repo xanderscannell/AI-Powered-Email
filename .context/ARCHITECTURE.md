@@ -6,23 +6,23 @@ A local Python agent that watches Gmail via MCP, processes each email through Cl
 
 ```
                         ┌─────────────────────────────────┐
-                        │         Gmail MCP Server         │
+                        │         Gmail MCP Server        │
                         └───────────────┬─────────────────┘
                                         │ new emails
                                         ▼
                         ┌─────────────────────────────────┐
-                        │         Email Watcher            │
-                        │    (core agent loop / poller)    │
+                        │         Email Watcher           │
+                        │    (core agent loop / poller)   │
                         └───────────────┬─────────────────┘
                                         │ raw email
                                         ▼
                         ┌─────────────────────────────────┐
-                        │       Processing Layer           │
-                        │  Claude Haiku API                │
-                        │  → email_type, domain            │
-                        │  → entities, summary             │
-                        └──────┬───────────┬──────────────┘
-                               │           │           │
+                        │       Processing Layer          │
+                        │  Claude Haiku API               │
+                        │  → email_type, domain           │
+                        │  → entities, summary            │
+                        └──────┬───────────┬──────────┬───┘
+                               │           │          │
                   ┌────────────┘    ┌──────┘    ┌─────┘
                   ▼                 ▼           ▼
          ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
@@ -30,20 +30,20 @@ A local Python agent that watches Gmail via MCP, processes each email through Cl
          │  & Stars     │  │  (vectors +  │  │  (contacts,  │
          │  (via MCP)   │  │   metadata)  │  │   follow-ups,│
          └──────────────┘  └──────┬───────┘  │   deadlines) │
-                                  │           └──────┬───────┘
-                                  └────────┬─────────┘
+                                  │          └──────┬───────┘
+                                  └────────┬────────┘
                                            │
                          ┌─────────────────┴──────────────┐
-                         │          Query Layer             │
-                         │  natural language search         │
+                         │          Query Layer           │
+                         │  natural language search       │
                          └─────────────────┬──────────────┘
                                            │
           ┌────────────────────────────────┼───────────────────────────┐
-          │                               │                            │
-┌─────────┴──────────┐        ┌──────────┴─────────┐     ┌───────────┴──────────┐
-│   Briefing Layer   │        │  Interaction Layer  │     │  MCP Server          │
-│  (APScheduler)     │        │  (CLI / web UI)     │     │  (Claude Desktop)    │
-│  daily digest      │        │  on-demand queries  │     │  7 read-only tools   │
+          │                                │                           │
+┌─────────┴──────────┐        ┌────────────┴───────┐     ┌─────────────┴────────┐
+│   Briefing Layer   │        │  Interaction Layer │     │  MCP Server          │
+│  (APScheduler)     │        │  (CLI / web UI)    │     │  (Claude Desktop)    │
+│  daily digest      │        │  on-demand queries │     │  7 read-only tools   │
 └────────────────────┘        └────────────────────┘     └──────────────────────┘
 ```
 

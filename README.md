@@ -46,10 +46,16 @@ search and daily briefings. Everything runs on your machine — no cloud storage
 └──────────────┘         └─────────┬────────┘
                                    ▼
                     ┌──────────────────────────┐
-                    │     CLI (email-agent)    │
-                    │  search / backfill /     │
-                    │  status / reindex        │
-                    └──────────────────────────┘
+                    │       Query Layer        │
+                    └────────────┬─────────────┘
+                                 │
+               ┌─────────────────┴─────────────────┐
+               │                                   │
+┌──────────────────────────┐       ┌───────────────────────────┐
+│     CLI (email-agent)    │       │  Claude Desktop           │
+│  search / backfill /     │       │  (email-agent-mcp)        │
+│  status / reindex        │       │  natural language queries │
+└──────────────────────────┘       └───────────────────────────┘
 ```
 
 ## Prerequisites
