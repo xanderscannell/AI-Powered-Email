@@ -38,13 +38,13 @@ A local Python agent that watches Gmail via MCP, processes each email through Cl
                          │  natural language search         │
                          └─────────────────┬──────────────┘
                                            │
-                    ┌──────────────────────┴───────────────┐
-                    │                                       │
-          ┌─────────┴──────────┐               ┌──────────┴─────────┐
-          │   Briefing Layer   │               │  Interaction Layer  │
-          │  (APScheduler)     │               │  (CLI / web UI)     │
-          │  daily digest      │               │  on-demand queries  │
-          └────────────────────┘               └────────────────────┘
+          ┌────────────────────────────────┼───────────────────────────┐
+          │                               │                            │
+┌─────────┴──────────┐        ┌──────────┴─────────┐     ┌───────────┴──────────┐
+│   Briefing Layer   │        │  Interaction Layer  │     │  MCP Server          │
+│  (APScheduler)     │        │  (CLI / web UI)     │     │  (Claude Desktop)    │
+│  daily digest      │        │  on-demand queries  │     │  7 read-only tools   │
+└────────────────────┘        └────────────────────┘     └──────────────────────┘
 ```
 
 ## Components
@@ -141,6 +141,28 @@ A local Python agent that watches Gmail via MCP, processes each email through Cl
 - Markdown file in `data/briefings/YYYY-MM-DD.md`
 - Email to own inbox (via Gmail MCP)
 - Printed to stdout
+
+---
+
+### MCP Server (Claude Desktop)
+
+**Purpose**: Exposes processed email data to Claude Desktop as 7 read-only tools. Spawned by Claude Desktop over stdio; no Gmail dependency, no Anthropic API dependency — pure local SQLite + ChromaDB reads.
+**Tech stack**: Python, `mcp.server.fastmcp.FastMCP`
+**Key files**:
+- `src/mcp/server.py`
+
+**Tools exposed**:
+- `search_emails(query, limit)` — semantic search via ChromaDB
+- `get_emails_needing_reply(hours)` — human emails awaiting reply
+- `get_pending_followups()` — follow-ups the agent is tracking
+- `get_open_deadlines()` — deadlines extracted from emails
+- `get_status()` — counts from SQLite + ChromaDB
+- `get_email(email_id)` — full email record by ID
+- `get_contact(email_address)` — contact history
+
+**Entry point**: `email-agent-mcp` → `src.mcp.server:main` → `mcp.run(transport="stdio")`
+
+**Notes**: Module-level singleton `_engine: QueryEngine | None` is built lazily on first tool call from `SQLITE_PATH` / `CHROMA_PATH` env vars. Requires the background agent to have run at least once (data files must exist). SQLite WAL mode ensures concurrent read access alongside the running watcher.
 
 ---
 

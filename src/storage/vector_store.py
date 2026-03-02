@@ -60,6 +60,10 @@ class EmailVectorStore:
             metadata={"hnsw:space": "cosine"},
         )
 
+    def count(self) -> int:
+        """Return the number of emails in the vector store."""
+        return self._collection.count()
+
     def close(self) -> None:
         """Release ChromaDB resources (important on Windows where files stay locked)."""
         try:

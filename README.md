@@ -12,6 +12,8 @@ search and daily briefings. Everything runs on your machine — no cloud storage
   email history
 - Backfills historical emails in bulk using the Anthropic Batches API (~50%
   cheaper than real-time processing)
+- Connects to **Claude Desktop** via a local MCP server — ask Claude natural
+  language questions about your inbox (`email-agent-mcp`)
 - *(Coming soon — Phase 5)* Daily briefing with urgent items, follow-ups,
   and upcoming deadlines
 
@@ -324,6 +326,73 @@ AI/
 
 > ⚠️ Run only one watcher instance at a time. Multiple instances will
 > conflict on the SQLite database.
+
+## Claude Desktop Integration
+
+The `email-agent-mcp` server lets Claude Desktop query your processed email
+data using natural language. It is a pure read layer — it connects to the
+same local SQLite and ChromaDB stores used by the watcher and CLI, with no
+Gmail dependency and no Anthropic API calls.
+
+**Prerequisite**: Run `email-agent backfill` at least once so the data stores
+contain emails. The MCP server cannot read from Gmail directly.
+
+### Tools exposed to Claude Desktop
+
+| Tool | What it does |
+|------|-------------|
+| `search_emails` | Semantic search across all processed emails |
+| `get_emails_needing_reply` | Human emails awaiting a reply (configurable time window) |
+| `get_pending_followups` | Follow-ups the agent is tracking |
+| `get_open_deadlines` | Deadlines extracted from emails |
+| `get_status` | Counts: total emails, vector index size, needing reply, follow-ups, deadlines |
+| `get_email` | Full record for a single email by ID |
+| `get_contact` | Contact history for an email address |
+
+### Configuration
+
+Add the following to your Claude Desktop config file:
+
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "email-agent": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory", "/absolute/path/to/AI-Powered-Email",
+        "email-agent-mcp"
+      ]
+    }
+  }
+}
+```
+
+Replace `/absolute/path/to/AI-Powered-Email` with the actual path to this
+repository on your machine.
+
+After saving the config, restart Claude Desktop. You should see "email-agent"
+in the MCP servers list. Try asking:
+
+- *"What emails need my attention today?"*
+- *"Search my emails for anything about the Acme invoice"*
+- *"Do I have any upcoming deadlines?"*
+
+### Smoke Test (without Claude Desktop)
+
+Verify the server starts correctly from the command line:
+
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  | uv run email-agent-mcp
+```
+
+This should print a JSON response listing all 7 tools.
+
+---
 
 ## CLI: On-Demand Commands
 

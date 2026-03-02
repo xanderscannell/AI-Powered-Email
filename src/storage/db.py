@@ -134,6 +134,10 @@ class EmailDatabase:
             result.append(EmailRow(**d))
         return result
 
+    def get_email_count(self) -> int:
+        """Return the total number of processed emails."""
+        return self._conn.execute("SELECT COUNT(*) FROM emails").fetchone()[0]
+
     def get_all_emails(self) -> list[EmailRow]:
         """Return every email row, ordered by processed_at ascending."""
         rows = self._conn.execute(

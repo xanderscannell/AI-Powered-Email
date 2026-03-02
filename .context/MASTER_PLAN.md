@@ -168,43 +168,72 @@ A local Python agent that integrates with Gmail and Google Calendar via MCP, pro
 
 ---
 
-## Phase 6: Interaction Layer (Full CLI)
+## Phase 6: Claude Desktop MCP Server
+
+**Goal**: Expose the processed email data to Claude Desktop as 7 read-only tools, allowing Claude to answer natural language questions about your inbox.
+
+### 6.1 FastMCP Server
+- [x] Implement `src/mcp/server.py` with 7 tools:
+  - `search_emails(query, limit)` — semantic search via ChromaDB
+  - `get_emails_needing_reply(hours)` — human emails awaiting reply
+  - `get_pending_followups()` — follow-ups the agent is tracking
+  - `get_open_deadlines()` — deadlines extracted from emails
+  - `get_status()` — counts from SQLite + ChromaDB
+  - `get_email(email_id)` — full email record by ID
+  - `get_contact(email_address)` — contact history
+- [x] Add `email-agent-mcp = "src.mcp.server:main"` script entry point
+
+### 6.2 Helper Methods
+- [x] `EmailDatabase.get_email_count()` — total email count
+- [x] `EmailVectorStore.count()` — total vector count
+
+### 6.3 Tests
+- [x] `tests/test_mcp/test_server.py` — 31 tests; real tmp databases seeded with fixture data; no live API calls
+
+### Phase 6 Milestones
+- [x] `uv run email-agent-mcp` starts over stdio without errors
+- [x] All 7 tools return correct shapes against fixture data
+- [ ] Claude Desktop configured and can answer: "What emails need my attention?"
+
+---
+
+## Phase 7: Interaction Layer (Full CLI)
 
 **Goal**: Full on-demand query and draft generation from the CLI.
 
-### 6.1 Full CLI Commands
+### 7.1 Full CLI Commands
 - [ ] `email summarize-unread` — summarize all unread with priority sort
 - [ ] `email draft-reply <email_id>` — generate reply draft, push to Gmail drafts
 - [ ] `email contacts [email_address]` — show contact sentiment history
 - [ ] `email follow-ups` — list pending follow-ups with due dates
 
-### 6.2 Google Calendar Integration
+### 7.2 Google Calendar Integration
 - [ ] Configure Google Calendar MCP
 - [ ] `email briefing` enriched with calendar context (meetings today, upcoming deadlines that have calendar events)
 
-### Phase 6 Milestones
+### Phase 7 Milestones
 - [ ] Draft reply pushed to Gmail drafts folder successfully
 - [ ] Calendar events referenced in morning briefing
 
 ---
 
-## Phase 7: Polish & Optional Web UI
+## Phase 8: Polish & Optional Web UI
 
 **Goal**: Production-quality local tool with optional browser-based UI.
 
-### 7.1 Reliability & Error Recovery
+### 8.1 Reliability & Error Recovery
 - [ ] Retry logic for MCP connection failures
 - [ ] Dead letter queue for emails that failed processing
 - [ ] Health check command: `email health`
 
-### 7.2 Optional Local Web UI
+### 8.2 Optional Local Web UI
 - [ ] Simple FastAPI + HTMX web UI at `localhost:8080`
   - Dashboard: today's briefing, unread summary, search bar
   - Not required for core functionality
 
-### Phase 7 Milestones
+### Phase 8 Milestones
 - [ ] Agent runs for 7 days without manual intervention
-- [ ] All Phase 1-6 success criteria verified end-to-end
+- [ ] All Phase 1-7 success criteria verified end-to-end
 
 ---
 
@@ -215,9 +244,10 @@ Phase 1 (Foundation)
     └──► Phase 2 (Haiku Processing)
               └──► Phase 3 (Storage)
                         ├──► Phase 4 (Search CLI)
+                        │         └──► Phase 6 (Claude Desktop MCP Server) ✓
                         └──► Phase 5 (Briefings)
-                                   └──► Phase 6 (Full CLI + Calendar)
-                                              └──► Phase 7 (Polish)
+                                   └──► Phase 7 (Full CLI + Calendar)
+                                              └──► Phase 8 (Polish)
 ```
 
 ## Risk Areas

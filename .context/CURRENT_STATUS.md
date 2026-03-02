@@ -4,9 +4,9 @@
 
 ## Current Position
 
-**Phase**: Schema Redesign complete — ready for Phase 5
+**Phase**: Phase 6 complete — ready for Phase 5 (Briefing Generator)
 **Subphase**: N/A
-**Progress**: 85% complete
+**Progress**: 90% complete
 
 ## Recently Completed
 
@@ -40,10 +40,18 @@
   - `PRAGMA foreign_keys=ON` now enforced
   - Test embeddings upgraded to `WordHashEmbeddingFunction` (bag-of-words hashing) for meaningful semantic ranking tests
   - 9 new tests in `TestSemanticRanking` and `TestScaleAndIntegrity`
+- **Phase 6 complete** (2026-03-01): Claude Desktop MCP Server — 7 read-only tools over stdio.
+  - `src/mcp/server.py` — FastMCP server with tools: search_emails, get_emails_needing_reply, get_pending_followups, get_open_deadlines, get_status, get_email, get_contact
+  - `tests/test_mcp/test_server.py` — 31 tests, real tmp databases, no API calls
+  - `EmailDatabase.get_email_count()` and `EmailVectorStore.count()` helper methods added
+  - `email-agent-mcp` script entry point registered in pyproject.toml
+  - MASTER_PLAN.md: Phase 6 inserted; old Phase 6 → 7, Phase 7 → 8
+  - ARCHITECTURE.md: MCP server added as third consumer of the storage layer
+  - 198 tests passing total (31 pre-existing failures in watcher + briefing scheduler)
 
 ## In Progress
 
-None — Schema Redesign complete.
+None — Phase 6 complete.
 
 ## Next Up
 
@@ -60,7 +68,7 @@ None — Schema Redesign complete.
 ```
 src/
 ├── agent/          [status: done — watcher.py]
-├── mcp/            [status: done — types.py, gmail_client.py]
+├── mcp/            [status: done — types.py, gmail_client.py, server.py (Phase 6)]
 ├── processing/     [status: done — types.py, prompts.py, analyzer.py]
 ├── storage/        [status: done — models.py, db.py, vector_store.py]
 ├── briefing/       [status: skeleton exists — generator.py, scheduler.py]
@@ -106,4 +114,8 @@ None currently.
 - `email-agent reindex` — rebuilds ChromaDB from SQLite with no API calls; run after deleting `data/chroma/` or changing distance metric
 - Vector store uses cosine distance (`hnsw:space=cosine`); similarity scores always in [0,1]
 - HTML is stripped from email bodies before the 4000-char truncation in the processing prompt
-- 13 pre-existing test failures in `test_watcher.py` and `test_briefing_scheduler.py` — unrelated to recent changes; 204 tests passing
+- 198 tests passing (13 pre-existing failures in `test_watcher.py` and `test_briefing_scheduler.py`)
+- **Phase 6 MCP server**: `src/mcp/server.py` — module-level `_engine: QueryEngine | None = None` singleton; override in tests with `server_module._engine = my_engine`
+- `EmailDatabase.get_email_count()` — returns `SELECT COUNT(*) FROM emails`
+- `EmailVectorStore.count()` — returns `self._collection.count()`
+- `email-agent-mcp` entry point in pyproject.toml → `src.mcp.server:main` → `mcp.run(transport="stdio")`

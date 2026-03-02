@@ -23,6 +23,8 @@ uv.lock
 # Local data (never commit user data)
 data/chroma/
 data/*.db
+data/*.db-shm
+data/*.db-wal
 data/briefings/
 
 # Test / coverage artifacts

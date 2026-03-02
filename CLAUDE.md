@@ -53,8 +53,8 @@ Before the session ends:
 
 ## Current Focus
 
-**Phase**: Phase 5 — Briefing Generator
-**Working on**: Not yet started — ready to begin after Phase 4 CLI completion
+**Phase**: Phase 6 — Claude Desktop MCP Server (complete); Phase 5 — Briefing Generator (next)
+**Working on**: Phase 6 is complete (server + tests + entry point). Phase 5 is next.
 **Key constraint**: Everything runs locally — no cloud storage, no external servers beyond Gmail/GCal MCP and the Haiku/Sonnet API
 
 ## Commit Style

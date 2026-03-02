@@ -25,6 +25,7 @@ dev = [
 
 [project.scripts]
 email-agent = "src.cli.main:cli"
+email-agent-mcp = "src.mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]
