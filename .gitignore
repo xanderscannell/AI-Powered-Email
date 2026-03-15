@@ -26,6 +26,8 @@ data/*.db
 data/*.db-shm
 data/*.db-wal
 data/briefings/
+data/watcher.log
+data/watcher.pid
 
 # Test / coverage artifacts
 .pytest_cache/
